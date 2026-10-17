@@ -24,6 +24,12 @@ A single-file browser app for reviewing your own basketball games. Log timestamp
 
 Notes are stamped 3 seconds early by default (change "lead time" in Settings), since you usually react after the play.
 
+## Getting a video from YouTube
+
+Click **⬇ Get video** and paste a link to a video or playlist. The app writes a [yt-dlp](https://github.com/yt-dlp/yt-dlp) command: paste it into Terminal and the video is saved to `~/Movies/Game Reviewer` (you can change this), then the folder opens. One-time setup: `brew install yt-dlp ffmpeg`.
+
+The command prefers YouTube's own H.264 MP4, so most videos need no re-encoding. Only VP9/AV1-only videos (often 4K) get converted. Re-running a playlist skips videos you already have. Only download videos you're allowed to.
+
 ## Condensed game and highlight reel
 
 In the **Edit** tab:

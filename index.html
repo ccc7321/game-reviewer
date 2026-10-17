@@ -263,6 +263,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 <header class="top">
   <div class="brand"><span class="ball" aria-hidden="true"></span>Game Reviewer</div>
   <button id="openBtn" class="btn primary">Open video</button>
+  <button id="getBtn" class="btn" title="Download a game video from YouTube or another site">⬇ Get video</button>
   <input type="file" id="fileInput" accept="video/*,.mp4,.m4v,.mov,.webm,.mkv" hidden>
   <div id="fileName" class="file-name">No video loaded</div>
   <div class="spacer"></div>
@@ -279,7 +280,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
       <div id="empty" class="empty">
         <h2>Drop a game video here</h2>
         <p>Or use <b>Open video</b>. The video plays from your computer and is never uploaded. Notes are saved in this browser.</p>
-        <button class="btn primary" id="openBtn2">Open video</button>
+        <div class="row" style="justify-content:center"><button class="btn primary" id="openBtn2">Open video</button><button class="btn" id="getBtn2">⬇ Get a video from a link</button></div>
         <p class="hint">Press <kbd>?</kbd> for keyboard shortcuts.</p>
       </div>
       <div id="drawBar" class="drawbar" hidden>
@@ -456,6 +457,42 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
     <p class="hint" style="margin-top:10px">Shortcuts are off while you type in a text box, except Enter and Esc. Press <kbd>?</kbd> or <kbd>Esc</kbd> to close.</p>
   </div>
 </div>
+<div id="getModal" class="modal" hidden>
+  <div class="box" role="dialog" aria-label="Get a video from a link">
+    <h2>Get a game video from a link</h2>
+    <p class="hint">Paste a YouTube link (one video or a playlist). This writes a <b>yt-dlp</b> command for you to run in Terminal. The video is saved as an MP4 that opens here. Only download videos you're allowed to, like your own team's or league's uploads.</p>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+      <input type="text" id="ytUrl" placeholder="https://www.youtube.com/watch?v=…" aria-label="Video or playlist link" autocomplete="off" spellcheck="false">
+      <div class="row" id="ytPlaylistRow">
+        <span>Playlist link:</span>
+        <label class="check"><input type="radio" name="ytList" value="all"> <span>Download the whole playlist</span></label>
+        <label class="check"><input type="radio" name="ytList" value="one"> <span>Just this video</span></label>
+      </div>
+      <div class="row">
+        <span>Quality:</span>
+        <select id="ytQuality" aria-label="Quality">
+          <option value="1080">Up to 1080p (recommended)</option>
+          <option value="720">Up to 720p (smaller files)</option>
+          <option value="best">Best available, e.g. 4K (slower, usually re-encodes)</option>
+        </select>
+      </div>
+      <label class="row"><span>Save to</span><input type="text" id="ytDest" style="flex:1" spellcheck="false"></label>
+      <textarea id="ytCmd" class="cmd" rows="7" readonly></textarea>
+      <div class="row">
+        <button class="btn primary" id="ytCopy">Copy command</button>
+        <button class="btn" id="ytScript">Download as script</button>
+        <span class="spacer"></span>
+        <button class="btn" id="ytClose">Close</button>
+      </div>
+      <ol class="hint steps">
+        <li>First time only, install the tools: <code>brew install yt-dlp ffmpeg</code></li>
+        <li>Copy the command, paste it into Terminal, and press Return.</li>
+        <li>When it finishes, the folder opens in Finder. Drag the video onto this app.</li>
+      </ol>
+      <p class="hint">Most YouTube videos come down as MP4 directly, so they're ready straight away. Only videos without an MP4 version are re-encoded, which is slower. Re-running a playlist only downloads new videos (it remembers past downloads in <code>.downloaded.txt</code> in the save folder). If yt-dlp suddenly fails, update it with <code>brew upgrade yt-dlp</code>.</p>
+    </div>
+  </div>
+</div>
 <div id="tooltip" class="tooltip" hidden></div>
 <div id="toasts"></div>
 
@@ -508,6 +545,8 @@ function loadSettings() {
     clipAfter: num(s.clipAfter, 6),
     theme: s.theme === 'light' ? 'light' : 'dark',
     subMode: ['burn', 'soft', 'none'].includes(s.subMode) ? s.subMode : 'burn',
+    ytDest: typeof s.ytDest === 'string' && s.ytDest.trim() ? s.ytDest : '~/Movies/Game Reviewer',
+    ytQuality: ['1080', '720', 'best'].includes(s.ytQuality) ? s.ytQuality : '1080',
     tags: Array.isArray(s.tags) && s.tags.length ? s.tags : clone(DEFAULT_TAGS),
   };
 }
@@ -1553,6 +1592,69 @@ function downloadScript(kind) {
   toast(`Saved ${s.file}. Now run it in Terminal (steps below).`, '', 4000);
 }
 
+/* ---------- Get a video with yt-dlp ---------- */
+function shPath(p) {
+  p = p.trim() || '~/Movies/Game Reviewer';
+  if (p === '~') return '"$HOME"';
+  if (p.startsWith('~/')) return '"$HOME"/' + shq(p.slice(2).replace(/\/+$/, ''));
+  return shq(p.replace(/\/+$/, ''));
+}
+function ytOptions() {
+  const url = $('#ytUrl').value.trim();
+  const hasList = /[?&]list=/.test(url) || /\/playlist\b/.test(url);
+  const listChoice = ($$('input[name=ytList]').find(r => r.checked) || {}).value || 'all';
+  return { url, hasList, playlist: hasList && listChoice === 'all', quality: $('#ytQuality').value, dest: $('#ytDest').value };
+}
+/* Prefer H.264 + AAC so YouTube's own MP4 is used as-is; --recode-video only
+   re-encodes when the download didn't end up as .mp4 (e.g. VP9/AV1 only). */
+function buildYtCommand(o) {
+  const dest = shPath(o.dest);
+  const sort = o.quality === 'best' ? 'res,vcodec:h264,acodec:m4a' : `res:${o.quality},vcodec:h264,acodec:m4a`;
+  const out = o.playlist ? '%(playlist_title,playlist)s/%(playlist_index)03d - %(title)s.%(ext)s' : '%(title)s.%(ext)s';
+  const args = [
+    'yt-dlp', o.playlist ? '--yes-playlist' : '--no-playlist',
+    '-f', shq('bv*+ba/b'), '-S', shq(sort),
+    '--recode-video', 'mp4',
+    '--postprocessor-args', shq('VideoConvertor+ffmpeg:-c:v libx264 -crf 18 -preset medium -c:a aac -b:a 192k -movflags +faststart'),
+    '--download-archive', dest + shq('/.downloaded.txt'),
+    '-P', dest, '-o', shq(out), shq(o.url),
+  ];
+  return `mkdir -p ${dest} && ${args.join(' ')} && open ${dest}`;
+}
+function renderYt() {
+  const o = ytOptions();
+  $('#ytPlaylistRow').hidden = !o.hasList;
+  const valid = /^https?:\/\/\S+$/.test(o.url);
+  $('#ytCmd').value = valid ? buildYtCommand(o) : (o.url ? 'That doesn\'t look like a link. It should start with https://' : 'Paste a link above and the command appears here.');
+  $('#ytCopy').disabled = $('#ytScript').disabled = !valid;
+}
+function openGet() {
+  $('#ytDest').value = settings.ytDest;
+  $('#ytQuality').value = settings.ytQuality;
+  if (!$$('input[name=ytList]').some(r => r.checked)) $('input[name=ytList][value=all]').checked = true;
+  $('#getModal').hidden = false; renderYt(); $('#ytUrl').focus();
+}
+function closeGet() { $('#getModal').hidden = true; }
+$('#getBtn').onclick = $('#getBtn2').onclick = openGet;
+$('#ytClose').onclick = closeGet;
+$('#getModal').onclick = e => { if (e.target === $('#getModal')) closeGet(); };
+$('#getModal').addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeGet(); } });
+$('#getModal').addEventListener('input', renderYt);
+$('#getModal').addEventListener('change', () => {
+  settings.ytDest = $('#ytDest').value.trim() || '~/Movies/Game Reviewer';
+  settings.ytQuality = $('#ytQuality').value; saveSettings(); renderYt();
+});
+$('#ytCopy').onclick = () => copyText($('#ytCmd').value);
+$('#ytScript').onclick = () => {
+  const o = ytOptions();
+  const text = ['#!/bin/sh', '# Game Reviewer: download with yt-dlp. Run with: sh <this script>',
+    'if ! command -v yt-dlp >/dev/null 2>&1; then echo "yt-dlp is not installed. Install it with: brew install yt-dlp ffmpeg"; exit 1; fi',
+    'if ! command -v ffmpeg >/dev/null 2>&1; then echo "ffmpeg is not installed. Install it with: brew install ffmpeg"; exit 1; fi',
+    buildYtCommand(o), ''].join('\n');
+  download('get-video.sh', text, 'text/x-sh');
+  toast('Saved get-video.sh. In Terminal: type sh and a space, drag the script in, press Return.', '', 5000);
+};
+
 /* ---------- Settings ---------- */
 function renderSettings() {
   $('#setLead').value = settings.leadTime;
@@ -1683,7 +1785,7 @@ document.addEventListener('keydown', e => {
     e.preventDefault(); return;
   }
   if (e.key === '?' || (k === '/' && e.shiftKey)) { toggleHelp(); e.preventDefault(); return; }
-  if (!$('#help').hidden) return;
+  if (!$('#help').hidden || !$('#getModal').hidden) return;
   if (!hasVideo()) return;
 
   if (state.draw) {
