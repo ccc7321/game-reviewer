@@ -206,6 +206,27 @@ table.stats td.num { text-align: right; font-variant-numeric: tabular-nums; font
 .tag-edit input.key { text-align: center; text-transform: uppercase; }
 .field { display: grid; grid-template-columns: minmax(0,1fr) 90px; gap: 8px; align-items: center; }
 
+/* Edit tab: dead time and clips */
+.ranges { display: flex; flex-direction: column; gap: 6px; }
+.range { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px; display: flex; flex-direction: column; gap: 5px; }
+.range.cut { border-left: 3px solid var(--muted); }
+.range.clip { border-left: 3px solid var(--accent); }
+.range-top, .range-bottom { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.range-top input { flex: 1; min-width: 120px; padding: 4px 6px; }
+.range .idx { font-weight: 700; color: var(--accent); min-width: 1.4em; text-align: center; }
+.range .lbl { color: var(--muted); font-size: 12px; margin-left: 2px; }
+.range .tbtn { font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent); }
+.range .len { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.range .btn.small { padding: 2px 6px; }
+.check { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+.check input { margin-top: 3px; accent-color: var(--accent); }
+.steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.pending { font-size: 12px; font-weight: 600; color: var(--accent); }
+.cut-band { position: absolute; top: 0; bottom: 0; pointer-events: none; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--text) 30%, transparent) 0 3px, transparent 3px 7px); }
+.clip-band { position: absolute; bottom: 0; height: 5px; pointer-events: none; background: var(--accent); border-radius: 2px; opacity: .9; }
+.pend-band { opacity: .55; }
+details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+
 /* Modal, tooltip, toasts */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
 .modal .box { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); max-width: 640px; width: 100%; max-height: 90vh; overflow: auto; padding: 18px; }
@@ -306,12 +327,14 @@ table.stats td.num { text-align: right; font-variant-numeric: tabular-nums; font
       <button class="btn small" id="loopBBtn" title="Set loop end (B)">B</button>
       <button class="btn small" id="loopBtn" title="Toggle loop (L)">Loop</button>
       <span class="loop-label" id="loopLabel"></span>
+      <span class="pending" id="pendingLabel"></span>
       <button class="btn" id="noteBtn" title="Add note (N)">+ Note</button>
       <button class="btn" id="drawBtn" title="Draw on frame (D)">✎ Draw</button>
     </div>
     <div class="timeline">
       <div class="track" id="track" title="">
         <div class="loop-region" id="loopRegion" hidden></div>
+        <div id="bands"></div>
         <div id="markers"></div>
         <div class="playhead" id="playhead"></div>
       </div>
@@ -321,6 +344,7 @@ table.stats td.num { text-align: right; font-variant-numeric: tabular-nums; font
   <aside class="sidebar">
     <nav class="tabs" id="tabs">
       <button data-tab="notes" class="active">Notes</button>
+      <button data-tab="edit">Edit</button>
       <button data-tab="stats">Stats</button>
       <button data-tab="export">Export</button>
       <button data-tab="settings">Settings</button>
@@ -334,6 +358,43 @@ table.stats td.num { text-align: right; font-variant-numeric: tabular-nums; font
         <span class="hint" id="countLabel"></span>
       </div>
       <ul class="notes" id="noteList"></ul>
+    </div>
+
+    <div class="panel" data-panel="edit" hidden>
+      <h3>Dead time</h3>
+      <p class="hint">Press <kbd>X</kbd> when a timeout, free throws or a break starts, and <kbd>X</kbd> again when play resumes. These parts are left out of the condensed game.</p>
+      <label class="check"><input type="checkbox" id="skipDead"> <span>Skip dead time while playing (preview the condensed game)</span></label>
+      <div class="ranges" id="cutList"></div>
+      <p class="hint" id="cutSummary"></p>
+
+      <h3>Highlight reel</h3>
+      <p class="hint">Press <kbd>C</kbd> at the start and end of a play, or turn notes into clips. Trim, reorder and caption them here.</p>
+      <div class="row">
+        <button class="btn small" id="clipsFromNotes">+ Clips from notes</button>
+        <button class="btn small primary" id="previewReel">▶ Preview reel</button>
+      </div>
+      <div class="ranges" id="clipList"></div>
+      <p class="hint" id="clipSummary"></p>
+
+      <h3>Make the video</h3>
+      <div class="row" id="subMode">
+        <span>Subtitles:</span>
+        <label class="check"><input type="radio" name="subMode" value="burn"> <span>Burned in</span></label>
+        <label class="check"><input type="radio" name="subMode" value="soft"> <span>Track you can turn on/off</span></label>
+        <label class="check"><input type="radio" name="subMode" value="none"> <span>None</span></label>
+      </div>
+      <p class="hint">Condensed game shows your notes as subtitles. Highlight reel shows each clip's caption.</p>
+      <div class="row">
+        <button class="btn primary" id="buildCondensed">Download condensed game script</button>
+        <button class="btn primary" id="buildReel">Download highlight reel script</button>
+      </div>
+      <ol class="hint steps">
+        <li>Download a script. It goes to your Downloads folder.</li>
+        <li>Open Terminal. Type <code>sh</code> and a space, drag the script into the window, type a space, drag in the <b>folder that holds the video</b>, then press Return.</li>
+        <li>It shows progress and saves the new video next to the original. A full game takes a few minutes.</li>
+      </ol>
+      <p class="hint">Needs ffmpeg once: <code>brew install ffmpeg</code>.</p>
+      <details><summary>Show the last script</summary><textarea id="scriptBox" class="cmd" rows="12" readonly></textarea></details>
     </div>
 
     <div class="panel" data-panel="stats" hidden>
@@ -376,7 +437,7 @@ table.stats td.num { text-align: right; font-variant-numeric: tabular-nums; font
       <label class="field"><span>Playlist clip: seconds before the note</span><input type="number" id="setBefore" min="0" max="60" step="0.5"></label>
       <label class="field"><span>Playlist clip: seconds after the note</span><input type="number" id="setAfter" min="0.5" max="120" step="0.5"></label>
       <h3>Tags</h3>
-      <p class="hint">Press the hotkey to drop a tag without pausing. Shift + hotkey also opens a note. Keys N, D, A, B, L are taken.</p>
+      <p class="hint">Press the hotkey to drop a tag without pausing. Shift + hotkey also opens a note. Keys N, D, A, B, L, X, C are taken.</p>
       <div id="tagEditor" style="display:flex;flex-direction:column;gap:6px"></div>
       <div class="row">
         <button class="btn small" id="addTagBtn">+ Add tag</button>
@@ -409,7 +470,7 @@ const DRAW_HOLD = 3;          // seconds a drawing stays visible after its time
 const CUE_LEN = 4;            // subtitle cue length
 const MAX_DRAW_W = 960;       // drawing resolution cap, to keep storage small
 const COLORS = ['#ff3b30', '#ffd60a', '#32d7ff', '#ffffff'];
-const RESERVED = new Set(['n', 'd', 'a', 'b', 'l', 'z', ' ', ',', '.', '[', ']', '?', '/']);
+const RESERVED = new Set(['n', 'd', 'a', 'b', 'l', 'z', 'x', 'c', ' ', ',', '.', '[', ']', '?', '/']);
 const DEFAULT_TAGS = [
   { id: 'made',     name: 'My shot (made)',     key: '1', color: '#22c55e' },
   { id: 'missed',   name: 'My shot (missed)',   key: '2', color: '#ef4444' },
@@ -446,6 +507,7 @@ function loadSettings() {
     clipBefore: num(s.clipBefore, 2),
     clipAfter: num(s.clipAfter, 6),
     theme: s.theme === 'light' ? 'light' : 'dark',
+    subMode: ['burn', 'soft', 'none'].includes(s.subMode) ? s.subMode : 'burn',
     tags: Array.isArray(s.tags) && s.tags.length ? s.tags : clone(DEFAULT_TAGS),
   };
 }
@@ -458,6 +520,7 @@ const state = {
   filterTags: new Set(), search: '', selectedId: null, activeId: null,
   loopA: null, loopB: null, loopOn: false,
   entry: null, playlist: null, draw: null,
+  cuts: [], clips: [], pendingCut: null, pendingClip: null, skipDead: false,
   lastPosSave: 0, shownDrawing: null,
 };
 
@@ -547,6 +610,7 @@ function openFile(file) {
   state.baseName = file.name.replace(/\.[^.]+$/, '');
   state.key = null; state.notes = []; state.selectedId = null; state.activeId = null;
   state.loopA = state.loopB = null; state.loopOn = false;
+  state.cuts = []; state.clips = []; state.pendingCut = state.pendingClip = null;
   $('#fileName').textContent = file.name;
   video.src = state.url;
   video.load();
@@ -556,6 +620,8 @@ video.addEventListener('loadedmetadata', () => {
   state.key = 'notes:' + state.fileName + '|' + Math.round(video.duration);
   const saved = store.get(state.key, null);
   state.notes = saved && Array.isArray(saved.notes) ? saved.notes : [];
+  state.cuts = saved && Array.isArray(saved.cuts) ? saved.cuts : [];
+  state.clips = saved && Array.isArray(saved.clips) ? saved.clips : [];
   sortNotes();
   $('#empty').hidden = true;
   video.playbackRate = 1;
@@ -600,7 +666,7 @@ window.addEventListener('drop', e => {
 function sortNotes() { state.notes.sort((a, b) => a.t - b.t); }
 function saveNotes() {
   if (!state.key) return;
-  store.set(state.key, { app: 'game-reviewer', video: { name: state.fileName, duration: dur() }, notes: state.notes });
+  store.set(state.key, { app: 'game-reviewer', video: { name: state.fileName, duration: dur() }, notes: state.notes, cuts: state.cuts, clips: state.clips });
 }
 function addNote(n) {
   const note = { id: uid(), t: clamp(n.t, 0, dur()), tag: n.tag || null, text: n.text || '', drawing: n.drawing || null, created: Date.now() };
@@ -754,13 +820,18 @@ function buildClips(notes) {
   });
   return clips;
 }
-function startPlaylist() {
+function startPlaylist(custom, title) {
   if (!hasVideo()) return;
-  const notes = filteredNotes();
-  if (!notes.length) { toast('No notes match the filter'); return; }
+  let clips = custom;
+  if (!clips) {
+    const notes = filteredNotes();
+    if (!notes.length) { toast('No notes match the filter'); return; }
+    clips = buildClips(notes);
+  }
+  if (!clips.length) return;
   closeEntry(false); exitDraw(true);
   state.loopOn = false; renderLoop();
-  state.playlist = { clips: buildClips(notes), i: 0 };
+  state.playlist = { clips, i: 0, title: title || 'Playlist' };
   gotoClip(0);
   video.play().catch(() => {});
 }
@@ -770,7 +841,7 @@ function gotoClip(i) {
   p.i = Math.max(0, i);
   seek(p.clips[p.i].start);
   const c = p.clips[p.i];
-  $('#playlistLabel').textContent = `Playlist · clip ${p.i + 1} of ${p.clips.length} · ${fmt(c.start)}–${fmt(c.end)}`;
+  $('#playlistLabel').textContent = `${p.title} · clip ${p.i + 1} of ${p.clips.length} · ${fmt(c.start)}–${fmt(c.end)}`;
   $('#playlistBar').hidden = false;
 }
 function stopPlaylist(silent) {
@@ -778,7 +849,7 @@ function stopPlaylist(silent) {
   state.playlist = null; $('#playlistBar').hidden = true;
   if (!silent) toast('Playlist stopped', '', 1000);
 }
-$('#playlistBtn').onclick = startPlaylist;
+$('#playlistBtn').onclick = () => startPlaylist();
 $('#plPrev').onclick = () => state.playlist && gotoClip(state.playlist.i - 1);
 $('#plNext').onclick = () => state.playlist && gotoClip(state.playlist.i + 1);
 $('#plStop').onclick = () => stopPlaylist();
@@ -969,7 +1040,7 @@ function exportNotePNG(n) {
 
 /* ---------- Rendering ---------- */
 function renderAll() {
-  renderFilters(); renderList(); renderTimeline(); renderStats(); renderCommands();
+  renderFilters(); renderList(); renderTimeline(); renderStats(); renderCommands(); renderEdit();
 }
 
 function renderFilters() {
@@ -1014,6 +1085,7 @@ function renderList() {
       <div class="text ${n.text ? '' : 'placeholder'}" title="Click to edit">${n.text ? esc(n.text) : (n.drawing ? 'Drawing' : 'Add text…')}</div>
       <div class="acts">
         ${n.drawing ? `<button class="btn ghost small" data-png title="Download frame + drawing as PNG">✎ PNG</button>` : ''}
+        <button class="btn ghost small" data-clip title="Add to highlight reel">✂</button>
         <button class="btn ghost small danger" data-del title="Delete">✕</button>
       </div>
     </li>`;
@@ -1025,6 +1097,7 @@ $('#noteList').addEventListener('click', e => {
   const id = li.dataset.id, n = state.notes.find(x => x.id === id); if (!n) return;
   if (e.target.closest('[data-del]')) { deleteNote(id); return; }
   if (e.target.closest('[data-png]')) { exportNotePNG(n); return; }
+  if (e.target.closest('[data-clip]')) { addClipsFromNotes([n]); return; }
   if (e.target.closest('select')) return;
   const textEl = e.target.closest('.text');
   if (textEl && !textEl.querySelector('input')) { selectNote(n, false); editText(li, n); return; }
@@ -1069,6 +1142,7 @@ function renderTimeline() {
   m.innerHTML = state.notes.map(n =>
     `<button class="marker ${n.drawing ? 'has-drawing' : ''} ${filtering && !visible.has(n.id) ? 'dim' : ''} ${n.id === state.selectedId ? 'sel' : ''}" data-id="${n.id}" style="left:${n.t / d * 100}%;background:${esc(noteColor(n))}" aria-label="${esc(fmt(n.t) + ' ' + noteLabel(n))}"></button>`
   ).join('');
+  renderBands();
   renderLoop();
 }
 
@@ -1181,7 +1255,7 @@ function toJSON() {
   return JSON.stringify({
     app: 'game-reviewer', version: 1, exported: new Date().toISOString(),
     video: { name: state.fileName, duration: dur() },
-    tags: settings.tags, notes: state.notes,
+    tags: settings.tags, notes: state.notes, cuts: state.cuts, clips: state.clips,
   }, null, 2);
 }
 $$('[data-export]').forEach(b => b.onclick = () => {
@@ -1205,6 +1279,10 @@ async function importJSON(file) {
     id: String(n.id || uid()), t: +n.t, tag: n.tag || null, text: String(n.text || ''),
     drawing: typeof n.drawing === 'string' && n.drawing.startsWith('data:image/') ? n.drawing : null, created: n.created || Date.now(),
   }));
+  const cleanRanges = (arr, textKey) => (Array.isArray(arr) ? arr : [])
+    .filter(r => r && Number.isFinite(+r.start) && Number.isFinite(+r.end) && +r.end > +r.start)
+    .map(r => ({ id: String(r.id || uid()), start: +r.start, end: +r.end, [textKey]: String(r[textKey] || '') }));
+  const cuts = cleanRanges(data.cuts, 'label'), clips = cleanRanges(data.clips, 'caption');
   const v = data.video || {};
   if (Array.isArray(data.tags) && data.tags.length) {
     settings.tags = data.tags.filter(t => t && t.id && t.name).map(t => ({ id: String(t.id), name: String(t.name), key: String(t.key || '').slice(0, 1).toLowerCase(), color: /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : '#94a3b8' }));
@@ -1213,11 +1291,11 @@ async function importJSON(file) {
   if (hasVideo()) {
     if (v.name && v.name !== state.fileName && !confirm(`This backup is for "${v.name}". Import its notes into "${state.fileName}" anyway?`)) return;
     if (state.notes.length && !confirm(`Replace the ${state.notes.length} current notes with ${notes.length} notes from the backup?`)) return;
-    state.notes = notes; sortNotes(); saveNotes(); renderEverything();
+    state.notes = notes; state.cuts = cuts; state.clips = clips; sortNotes(); saveNotes(); renderEverything();
     toast(`Imported ${notes.length} notes`);
   } else if (v.name && Number.isFinite(+v.duration)) {
     const key = 'notes:' + v.name + '|' + Math.round(+v.duration);
-    store.set(key, { app: 'game-reviewer', video: { name: v.name, duration: +v.duration }, notes });
+    store.set(key, { app: 'game-reviewer', video: { name: v.name, duration: +v.duration }, notes, cuts, clips });
     renderEverything();
     toast(`Imported ${notes.length} notes. Open "${v.name}" to see them.`, '', 5000);
   } else toast('Open the video first, then import', 'error');
@@ -1241,6 +1319,239 @@ function renderCommands() {
   }).join('\n') : '# No notes yet';
 }
 $$('[data-copy]').forEach(b => b.onclick = () => copyText($('#' + b.dataset.copy).value));
+
+/* ---------- Dead time, clips and video scripts ---------- */
+const MIN_RANGE = 0.5;
+function markRange(kind) {
+  if (!hasVideo() || state.draw) return;
+  const t = video.currentTime, pk = kind === 'cut' ? 'pendingCut' : 'pendingClip';
+  const name = kind === 'cut' ? 'Dead time' : 'Clip', key = kind === 'cut' ? 'X' : 'C';
+  if (state[pk] == null) {
+    state[pk] = t;
+    toast(`${name} starts at ${fmtTenth(t)}. Press ${key} again where it ends.`, '', 2500);
+  } else {
+    let a = state[pk], b = t; state[pk] = null;
+    if (b < a) [a, b] = [b, a];
+    if (b - a < MIN_RANGE) { toast(`${name} too short, cancelled`, '', 1500); }
+    else if (kind === 'cut') {
+      state.cuts.push({ id: uid(), start: a, end: b, label: '' }); sortCuts();
+      toast(`Dead time ${fmt(a)}–${fmt(b)} marked`, '', 1800);
+    } else {
+      state.clips.push({ id: uid(), start: a, end: b, caption: '' });
+      toast(`Clip ${state.clips.length} added (${(b - a).toFixed(1)}s)`, '', 1800);
+    }
+    saveNotes();
+  }
+  renderEdit(); renderTimeline();
+}
+function sortCuts() { state.cuts.sort((a, b) => a.start - b.start); }
+function addClipsFromNotes(notes) {
+  const d = dur(); let added = 0;
+  notes.forEach(n => {
+    const start = clamp(n.t - settings.clipBefore, 0, d), end = clamp(n.t + settings.clipAfter, 0, d);
+    if (end - start < MIN_RANGE) return;
+    if (state.clips.some(c => Math.abs(c.start - start) < 0.05 && Math.abs(c.end - end) < 0.05)) return;
+    state.clips.push({ id: uid(), start, end, caption: n.text || tagName(n.tag) || '' });
+    added++;
+  });
+  saveNotes(); renderEdit(); renderTimeline();
+  toast(added ? `Added ${added} clip${added === 1 ? '' : 's'} to the highlight reel` : 'Those clips are already in the reel');
+}
+
+/* Parts of the video that the condensed game keeps */
+function condensedSegments() {
+  const d = dur(), merged = [];
+  state.cuts.slice().sort((a, b) => a.start - b.start).forEach(c => {
+    const s = clamp(c.start, 0, d), e = clamp(c.end, 0, d);
+    const last = merged[merged.length - 1];
+    if (last && s <= last.end) last.end = Math.max(last.end, e); else merged.push({ start: s, end: e });
+  });
+  const keep = []; let pos = 0;
+  merged.forEach(c => { if (c.start - pos > 0.1) keep.push({ start: pos, end: c.start }); pos = Math.max(pos, c.end); });
+  if (d - pos > 0.1) keep.push({ start: pos, end: d });
+  return keep;
+}
+function totalLen(segs) { return segs.reduce((a, s) => a + (s.end - s.start), 0); }
+
+function renderBands() {
+  const d = dur(), el = $('#bands'); if (!el) return;
+  if (!d) { el.innerHTML = ''; return; }
+  const pct = x => (x / d * 100) + '%';
+  el.innerHTML = state.cuts.map(c => `<div class="cut-band" style="left:${pct(c.start)};width:${pct(c.end - c.start)}"></div>`).join('') +
+    state.clips.map(c => `<div class="clip-band" style="left:${pct(c.start)};width:${pct(c.end - c.start)}"></div>`).join('') +
+    '<div class="cut-band pend-band" id="pendCut" hidden></div><div class="clip-band pend-band" id="pendClip" hidden></div>';
+  renderPendingBand(video.currentTime);
+}
+function renderPendingBand(ct) {
+  const d = dur(); if (!d) return;
+  [['#pendCut', state.pendingCut], ['#pendClip', state.pendingClip]].forEach(([sel, start]) => {
+    const b = $(sel); if (!b) return;
+    if (start == null) { b.hidden = true; return; }
+    const a = Math.min(start, ct), z = Math.max(start, ct);
+    b.hidden = false; b.style.left = (a / d * 100) + '%'; b.style.width = ((z - a) / d * 100) + '%';
+  });
+  const parts = [];
+  if (state.pendingCut != null) parts.push(`● Dead time from ${fmt(state.pendingCut)}: press X to end`);
+  if (state.pendingClip != null) parts.push(`● Clip from ${fmt(state.pendingClip)}: press C to end`);
+  const txt = parts.join(' · ');
+  if ($('#pendingLabel').textContent !== txt) $('#pendingLabel').textContent = txt;
+}
+
+function rangeRow(r, kind, i, count) {
+  const isClip = kind === 'clip', f = isClip ? 'caption' : 'label';
+  return `<div class="range ${kind}" data-kind="${kind}" data-rid="${esc(r.id)}">
+    <div class="range-top">
+      ${isClip ? `<span class="idx">${i + 1}</span>` : ''}
+      <input type="text" data-f="${f}" value="${esc(r[f])}" placeholder="${isClip ? 'Caption shown on this clip' : 'Label, e.g. Timeout'}">
+      <button class="btn ghost small" data-act="play" title="Play this part">▶</button>
+      ${isClip ? `<button class="btn ghost small" data-act="up" title="Move up" ${i === 0 ? 'disabled' : ''}>▲</button><button class="btn ghost small" data-act="down" title="Move down" ${i === count - 1 ? 'disabled' : ''}>▼</button>` : ''}
+      <button class="btn ghost small danger" data-act="del" title="Remove">✕</button>
+    </div>
+    <div class="range-bottom">
+      <span class="lbl">Start</span>
+      <button class="btn small" data-act="start-" title="0.5s earlier">−</button><button class="btn small tbtn" data-act="seek-start" title="Jump here">${fmtTenth(r.start)}</button><button class="btn small" data-act="start+" title="0.5s later">+</button><button class="btn small" data-act="start=" title="Set to current time">Now</button>
+      <span class="lbl">End</span>
+      <button class="btn small" data-act="end-" title="0.5s earlier">−</button><button class="btn small tbtn" data-act="seek-end" title="Jump here">${fmtTenth(r.end)}</button><button class="btn small" data-act="end+" title="0.5s later">+</button><button class="btn small" data-act="end=" title="Set to current time">Now</button>
+      <span class="len">${(r.end - r.start).toFixed(1)}s</span>
+    </div>
+  </div>`;
+}
+function renderEdit() {
+  if (!$('#cutList')) return;
+  const d = dur();
+  $('#cutList').innerHTML = state.cuts.length ? state.cuts.map((r, i) => rangeRow(r, 'cut', i, state.cuts.length)).join('') : '';
+  const removed = d ? d - totalLen(condensedSegments()) : 0;
+  $('#cutSummary').textContent = state.cuts.length
+    ? `${state.cuts.length} dead-time part${state.cuts.length === 1 ? '' : 's'} · ${fmt(removed)} removed · condensed game ${fmt(d - removed)} (from ${fmt(d)})`
+    : (hasVideo() ? 'No dead time marked yet.' : '');
+  $('#clipList').innerHTML = state.clips.map((r, i) => rangeRow(r, 'clip', i, state.clips.length)).join('');
+  $('#clipSummary').textContent = state.clips.length
+    ? `${state.clips.length} clip${state.clips.length === 1 ? '' : 's'} · reel length ${fmt(totalLen(state.clips))}` : (hasVideo() ? 'No clips yet.' : '');
+  const fn = filteredNotes().length;
+  $('#clipsFromNotes').textContent = `+ Clips from ${fn === state.notes.length ? 'all' : 'filtered'} notes (${fn})`;
+  $('#clipsFromNotes').disabled = !fn;
+  $('#previewReel').disabled = !state.clips.length;
+  $('#buildReel').disabled = !state.clips.length;
+  $('#buildCondensed').disabled = !hasVideo() || !state.cuts.length;
+  $$('#subMode input').forEach(r => r.checked = r.value === settings.subMode);
+  $('#skipDead').checked = state.skipDead;
+}
+function rangeAction(e) {
+  const row = e.target.closest('.range'); if (!row) return;
+  const btn = e.target.closest('[data-act]'); if (!btn) return;
+  const kind = row.dataset.kind, list = kind === 'cut' ? state.cuts : state.clips;
+  const i = list.findIndex(r => r.id === row.dataset.rid); if (i < 0) return;
+  const r = list[i], act = btn.dataset.act, d = dur();
+  if (act === 'play') { startPlaylist([{ start: r.start, end: r.end, ids: [] }], kind === 'cut' ? 'Dead time' : `Clip ${i + 1}`); return; }
+  if (act === 'seek-start' || act === 'seek-end') { stopPlaylist(true); video.pause(); seek(act === 'seek-start' ? r.start : r.end); return; }
+  if (act === 'del') {
+    if (!confirm(`Remove this ${kind === 'cut' ? 'dead-time part' : 'clip'} (${fmt(r.start)}–${fmt(r.end)})?`)) return;
+    list.splice(i, 1);
+  } else if (act === 'up' && i > 0) [list[i - 1], list[i]] = [list[i], list[i - 1]];
+  else if (act === 'down' && i < list.length - 1) [list[i + 1], list[i]] = [list[i], list[i + 1]];
+  else {
+    const m = /^(start|end)([-+=])$/.exec(act); if (!m) return;
+    const field = m[1];
+    let v = m[2] === '=' ? video.currentTime : r[field] + (m[2] === '+' ? 0.5 : -0.5);
+    v = clamp(v, 0, d);
+    if (field === 'start' && v > r.end - MIN_RANGE) { toast('Start must be before the end', 'error'); return; }
+    if (field === 'end' && v < r.start + MIN_RANGE) { toast('End must be after the start', 'error'); return; }
+    r[field] = v;
+    if (m[2] !== '=') { video.pause(); seek(v); }
+    if (kind === 'cut') sortCuts();
+  }
+  saveNotes(); renderEdit(); renderTimeline();
+}
+$('#cutList').addEventListener('click', rangeAction);
+$('#clipList').addEventListener('click', rangeAction);
+['#cutList', '#clipList'].forEach(sel => $(sel).addEventListener('change', e => {
+  const input = e.target.closest('input[data-f]'); if (!input) return;
+  const row = input.closest('.range'), list = row.dataset.kind === 'cut' ? state.cuts : state.clips;
+  const r = list.find(x => x.id === row.dataset.rid); if (!r) return;
+  r[input.dataset.f] = input.value.trim(); saveNotes();
+}));
+['#cutList', '#clipList'].forEach(sel => $(sel).addEventListener('keydown', e => {
+  if (e.target.matches('input[data-f]') && (e.key === 'Enter' || e.key === 'Escape')) e.target.blur();
+}));
+$('#skipDead').onchange = e => {
+  state.skipDead = e.target.checked;
+  toast(state.skipDead ? 'Skipping dead time while playing' : 'Playing everything', '', 1200);
+};
+$('#clipsFromNotes').onclick = () => addClipsFromNotes(filteredNotes());
+$('#previewReel').onclick = () => startPlaylist(state.clips.map(c => ({ start: c.start, end: c.end, ids: [] })), 'Highlight reel');
+$('#subMode').addEventListener('change', e => { if (e.target.name === 'subMode') { settings.subMode = e.target.value; saveSettings(); } });
+$('#buildCondensed').onclick = () => downloadScript('condensed');
+$('#buildReel').onclick = () => downloadScript('reel');
+
+function srtBody(cues) {
+  return cues.map((c, i) => `${i + 1}\n${fmtStamp(c.start, ',')} --> ${fmtStamp(c.end, ',')}\n${c.text.replace(/\s*\n+\s*/g, ' ').replace(/^GR_END$/, 'GR END')}\n`).join('\n');
+}
+/* Builds a POSIX sh script that cuts each part with ffmpeg (frame-accurate re-encode),
+   optionally burns subtitles, then joins the parts. */
+function buildScript(kind) {
+  const isReel = kind === 'reel';
+  const segs = isReel ? state.clips.map(c => ({ start: c.start, end: c.end, caption: c.caption })) : condensedSegments();
+  const mode = settings.subMode;
+  const noteCues = isReel ? [] : subtitleCues();
+  const partCues = segs.map(seg => {
+    if (mode === 'none') return [];
+    if (isReel) return seg.caption ? [{ start: 0, end: seg.end - seg.start, text: seg.caption }] : [];
+    return noteCues.map(c => ({ start: Math.max(c.start, seg.start) - seg.start, end: Math.min(c.end, seg.end) - seg.start, text: c.text }))
+      .filter(c => c.end - c.start > 0.05);
+  });
+  const slugBase = slug(state.baseName).slice(0, 40) || 'game';
+  const outName = `${state.baseName}-${isReel ? 'highlights' : 'condensed'}.mp4`;
+  const tmp = `${slugBase}-${isReel ? 'highlights' : 'condensed'}-parts`;
+  const pad = i => String(i + 1).padStart(3, '0');
+  const L = [];
+  L.push('#!/bin/sh',
+    `# Game Reviewer: ${isReel ? 'highlight reel' : 'condensed game'} from ${state.fileName}`,
+    `# ${segs.length} part(s), ${fmt(totalLen(segs))} long. Subtitles: ${mode}.`,
+    '# Run it with:  sh <this script> <folder that holds the video>',
+    'cd "${1:-.}" || exit 1',
+    `IN=${shq(state.fileName)}`,
+    `OUT=${shq(outName)}`,
+    `TMP=${shq(tmp)}`,
+    'if [ ! -f "$IN" ]; then echo "Could not find $IN in $(pwd)"; echo "Run: sh <this script> <folder that holds the video>"; exit 1; fi',
+    'if ! command -v ffmpeg >/dev/null 2>&1; then echo "ffmpeg is not installed. Install it with: brew install ffmpeg"; exit 1; fi',
+    'set -e',
+    'rm -rf "$TMP"', 'mkdir -p "$TMP"');
+  partCues.forEach((cues, i) => {
+    if (mode === 'burn' && cues.length) L.push(`cat > "$TMP/p${pad(i)}.srt" <<'GR_END'`, srtBody(cues), 'GR_END');
+  });
+  const style = "force_style='FontName=Helvetica,FontSize=20,Outline=2,Shadow=0,MarginV=24'";
+  segs.forEach((seg, i) => {
+    const len = (seg.end - seg.start).toFixed(3);
+    const vf = mode === 'burn' && partCues[i].length ? ` -vf "subtitles=$TMP/p${pad(i)}.srt:${style}"` : '';
+    L.push(`echo "Part ${i + 1} of ${segs.length} (${fmt(seg.start)} to ${fmt(seg.end)})"`,
+      `ffmpeg -hide_banner -loglevel error -stats -y -ss ${seg.start.toFixed(3)} -i "$IN" -t ${len}${vf} -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -c:a aac -b:a 160k -ar 48000 -ac 2 "$TMP/p${pad(i)}.mp4"`);
+  });
+  L.push(`printf '%s\\n' ${segs.map((_, i) => `"file 'p${pad(i)}.mp4'"`).join(' ')} > "$TMP/list.txt"`);
+  L.push('echo "Joining parts"');
+  if (mode === 'soft') {
+    let off = 0; const all = [];
+    segs.forEach((seg, i) => { partCues[i].forEach(c => all.push({ start: c.start + off, end: c.end + off, text: c.text })); off += seg.end - seg.start; });
+    if (all.length) {
+      L.push(`cat > "$TMP/all.srt" <<'GR_END'`, srtBody(all), 'GR_END');
+      L.push(`ffmpeg -hide_banner -loglevel error -y -f concat -safe 0 -i "$TMP/list.txt" -i "$TMP/all.srt" -map 0:v -map '0:a?' -map 1:s -c copy -c:s mov_text -metadata:s:s:0 language=eng -movflags +faststart "$OUT"`);
+    } else {
+      L.push(`ffmpeg -hide_banner -loglevel error -y -f concat -safe 0 -i "$TMP/list.txt" -c copy -movflags +faststart "$OUT"`);
+    }
+  } else {
+    L.push(`ffmpeg -hide_banner -loglevel error -y -f concat -safe 0 -i "$TMP/list.txt" -c copy -movflags +faststart "$OUT"`);
+  }
+  L.push('rm -rf "$TMP"', 'echo "Done: $(pwd)/$OUT"', '');
+  return { text: L.join('\n'), file: `${state.baseName}-${isReel ? 'highlights' : 'condensed'}.sh` };
+}
+function downloadScript(kind) {
+  if (!hasVideo()) return;
+  if (kind === 'reel' && !state.clips.length) { toast('Add some clips first'); return; }
+  if (kind === 'condensed' && !state.cuts.length) { toast('Mark some dead time with X first'); return; }
+  const s = buildScript(kind);
+  $('#scriptBox').value = s.text;
+  download(s.file, s.text, 'text/x-sh');
+  toast(`Saved ${s.file}. Now run it in Terminal (steps below).`, '', 4000);
+}
 
 /* ---------- Settings ---------- */
 function renderSettings() {
@@ -1324,6 +1635,8 @@ function renderHelp() {
     ...settings.tags.filter(t => t.key).map(t => [`<kbd>${esc(t.key.toUpperCase())}</kbd>`, `Tag: ${esc(t.name)} (Shift = tag + note)`]),
     ['<kbd>D</kbd>', 'Draw on the frame. In draw mode: <kbd>1</kbd>–<kbd>4</kbd> tools, <kbd>Z</kbd> undo, <kbd>Enter</kbd> save'],
     ['<kbd>A</kbd> / <kbd>B</kbd> / <kbd>L</kbd>', 'Set loop start / end, toggle loop'],
+    ['<kbd>X</kbd>', 'Dead time start / end (timeouts, free throws…), left out of the condensed game'],
+    ['<kbd>C</kbd>', 'Highlight clip start / end'],
     ['<kbd>Esc</kbd>', 'Close / stop playlist / leave draw mode'],
     ['<kbd>?</kbd>', 'This help'],
   ];
@@ -1365,6 +1678,7 @@ document.addEventListener('keydown', e => {
     if (!$('#help').hidden) toggleHelp(false);
     else if (state.draw) exitDraw();
     else if (state.playlist) stopPlaylist();
+    else if (state.pendingCut || state.pendingClip) { state.pendingCut = state.pendingClip = null; toast('Cancelled', '', 900); renderEdit(); renderTimeline(); }
     else if (state.selectedId) { state.selectedId = null; renderList(); renderTimeline(); }
     e.preventDefault(); return;
   }
@@ -1397,6 +1711,8 @@ document.addEventListener('keydown', e => {
     case 'a': setLoopPoint('a'); break;
     case 'b': setLoopPoint('b'); break;
     case 'l': toggleLoop(); break;
+    case 'x': markRange('cut'); break;
+    case 'c': markRange('clip'); break;
     default: {
       const tag = settings.tags.find(t => t.key && t.key === k);
       if (tag) quickTag(tag, e.shiftKey); else handled = false;
@@ -1425,7 +1741,11 @@ function tick() {
       if (c && ct >= c.end - 0.02 && !video.paused) gotoClip(state.playlist.i + 1);
     } else if (state.loopOn && !video.seeking && ct >= state.loopB) {
       video.currentTime = state.loopA;
+    } else if (state.skipDead && !video.paused && !video.seeking && !state.pendingCut) {
+      const cut = state.cuts.find(r => ct >= r.start && ct < r.end - 0.05);
+      if (cut) video.currentTime = Math.min(cut.end, d);
     }
+    if (state.pendingCut || state.pendingClip) renderPendingBand(ct);
 
     updateDrawShow(ct);
 

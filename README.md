@@ -19,8 +19,20 @@ A single-file browser app for reviewing your own basketball games. Log timestamp
 | 1–8 | Quick tag without pausing (Shift: tag + note) |
 | D | Draw on the frame |
 | A / B / L | Loop start / end / toggle |
+| X | Dead time start / end (timeouts, free throws, breaks) |
+| C | Highlight clip start / end |
 
 Notes are stamped 3 seconds early by default (change "lead time" in Settings), since you usually react after the play.
+
+## Condensed game and highlight reel
+
+In the **Edit** tab:
+
+- **Dead time:** press `X` when a timeout, free throws or a break starts and `X` again when play resumes. Tick "Skip dead time while playing" to preview the condensed game.
+- **Highlight reel:** press `C` at the start and end of a play, or turn notes into clips (all notes, the current filter, or ✂ on a single note). Trim, reorder and caption clips, then "Preview reel".
+- **Make the video:** choose subtitles (burned in, a track you can switch on/off, or none) and download the script. In Terminal, type `sh `, drag the script in, type a space, drag in the folder that holds the video, and press Return. The new video is saved next to the original. Needs ffmpeg (`brew install ffmpeg`).
+
+Cuts are frame-accurate, because each part is re-encoded. A full game takes a few minutes.
 
 ## Getting your notes out
 
@@ -34,7 +46,7 @@ Notes are stamped 3 seconds early by default (change "lead time" in Settings), s
 ```sh
 cd tests
 ffmpeg -f lavfi -i testsrc=duration=120:size=1280x720:rate=30 -pix_fmt yuv420p -c:v libvpx-vp9 -b:v 300k test.webm
-npm i -g playwright && node e2e.js
+npm i -g playwright && node e2e.js && node e2e-edit.js
 ```
 
 The tests use WebM because headless Chromium can't decode H.264; real Chrome and Safari play MP4 fine.
