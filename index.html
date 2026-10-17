@@ -1631,7 +1631,6 @@ function renderYt() {
 function openGet() {
   $('#ytDest').value = settings.ytDest;
   $('#ytQuality').value = settings.ytQuality;
-  if (!$$('input[name=ytList]').some(r => r.checked)) $('input[name=ytList][value=all]').checked = true;
   $('#getModal').hidden = false; renderYt(); $('#ytUrl').focus();
 }
 function closeGet() { $('#getModal').hidden = true; }
@@ -1639,6 +1638,16 @@ $('#getBtn').onclick = $('#getBtn2').onclick = openGet;
 $('#ytClose').onclick = closeGet;
 $('#getModal').onclick = e => { if (e.target === $('#getModal')) closeGet(); };
 $('#getModal').addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeGet(); } });
+// A watch link inside a playlist (watch?v=…&list=…) usually means "this video";
+// a /playlist?list=… link means the whole playlist. The user can still switch.
+let ytListTouched = false;
+$('#ytUrl').addEventListener('input', () => {
+  if (ytListTouched) return;
+  const url = $('#ytUrl').value;
+  const one = /[?&]v=/.test(url) || /youtu\.be\//.test(url);
+  $(`input[name=ytList][value=${one ? 'one' : 'all'}]`).checked = true;
+});
+$$('input[name=ytList]').forEach(r => r.addEventListener('change', () => { ytListTouched = true; }));
 $('#getModal').addEventListener('input', renderYt);
 $('#getModal').addEventListener('change', () => {
   settings.ytDest = $('#ytDest').value.trim() || '~/Movies/Game Reviewer';
