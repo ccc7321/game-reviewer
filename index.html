@@ -1,0 +1,1458 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Game Reviewer</title>
+<style>
+:root, [data-theme="dark"] {
+  --bg: #0e1014;
+  --panel: #161920;
+  --panel-2: #1e222b;
+  --panel-3: #262b36;
+  --border: #2b313d;
+  --text: #e7e9ee;
+  --muted: #98a1b0;
+  --accent: #f97316;
+  --accent-text: #160a02;
+  --danger: #ef4444;
+  --stage: #000;
+  --track: #232833;
+  --shadow: 0 8px 30px rgba(0,0,0,.45);
+  color-scheme: dark;
+}
+[data-theme="light"] {
+  --bg: #f3f4f7;
+  --panel: #ffffff;
+  --panel-2: #f1f3f6;
+  --panel-3: #e5e8ee;
+  --border: #d9dde5;
+  --text: #15181e;
+  --muted: #5b6473;
+  --accent: #ea580c;
+  --accent-text: #fff;
+  --danger: #dc2626;
+  --stage: #0b0c0f;
+  --track: #e2e5eb;
+  --shadow: 0 8px 30px rgba(20,25,35,.18);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+.hidden, [hidden] { display: none !important; }
+kbd {
+  display: inline-block; min-width: 1.6em; padding: 1px 5px; border-radius: 4px; text-align: center;
+  background: var(--panel-3); border: 1px solid var(--border); border-bottom-width: 2px;
+  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Buttons */
+.btn {
+  border: 1px solid var(--border); background: var(--panel-2); border-radius: 7px;
+  padding: 6px 10px; cursor: pointer; white-space: nowrap; line-height: 1.2;
+}
+.btn:hover { background: var(--panel-3); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { background: transparent; border-color: transparent; }
+.btn.ghost:hover { background: var(--panel-2); }
+.btn.small { padding: 3px 7px; font-size: 12px; }
+.btn.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.btn.danger:hover { color: var(--danger); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel-2); padding: 6px 8px; cursor: pointer; border-right: 1px solid var(--border); }
+.seg button:last-child { border-right: 0; }
+.seg button:hover { background: var(--panel-3); }
+.seg button.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+input[type=text], input[type=number], input[type=search], select, textarea {
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px; padding: 6px 8px; min-width: 0;
+}
+input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Header */
+.top {
+  display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  background: var(--panel); border-bottom: 1px solid var(--border); flex: 0 0 auto;
+}
+.brand { font-weight: 700; display: flex; align-items: center; gap: 8px; letter-spacing: .2px; }
+.ball {
+  width: 18px; height: 18px; border-radius: 50%; background: var(--accent); position: relative;
+  box-shadow: inset 0 0 0 1.5px rgba(0,0,0,.35);
+}
+.ball::before, .ball::after { content: ""; position: absolute; background: rgba(0,0,0,.4); }
+.ball::before { left: 50%; top: 0; bottom: 0; width: 1.5px; transform: translateX(-50%); }
+.ball::after { top: 50%; left: 0; right: 0; height: 1.5px; transform: translateY(-50%); }
+.file-name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.spacer { flex: 1; }
+
+/* Layout */
+.layout { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 7fr) minmax(320px, 3fr); }
+.viewer { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--border); }
+.sidebar { display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
+
+/* Stage */
+.stage { position: relative; flex: 1 1 auto; min-height: 200px; background: var(--stage); overflow: hidden; }
+.stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--stage); }
+.overlay { position: absolute; pointer-events: none; }
+#drawCanvas { pointer-events: auto; cursor: crosshair; touch-action: none; }
+.stage.dragover::after {
+  content: "Drop video to open"; position: absolute; inset: 12px; border: 3px dashed var(--accent); border-radius: 14px;
+  display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff; background: rgba(0,0,0,.55);
+}
+.empty {
+  position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center;
+  color: #c9ced8; text-align: center; padding: 24px;
+}
+.empty h2 { margin: 0; font-size: 20px; color: #fff; }
+.empty p { margin: 0; max-width: 440px; color: #a3abb9; }
+.drawbar, .entry, .playlist-bar {
+  position: absolute; left: 50%; transform: translateX(-50%); z-index: 5;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
+  padding: 8px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; max-width: calc(100% - 16px);
+}
+.drawbar { top: 8px; }
+.drawbar .sw { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.drawbar .sw.on { border-color: var(--text); box-shadow: 0 0 0 2px var(--panel); }
+.drawbar input[type=text] { width: 180px; }
+.entry { bottom: 10px; width: min(720px, calc(100% - 16px)); flex-wrap: nowrap; }
+.entry input[type=text] { flex: 1; }
+.entry-time { font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent); padding: 0 4px; }
+.playlist-bar { top: 8px; font-size: 13px; }
+.sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 2px; }
+
+/* Controls */
+.controls {
+  display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 8px 12px;
+  background: var(--panel); border-top: 1px solid var(--border); flex: 0 0 auto;
+}
+.time-label { font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; min-width: 120px; }
+.loop-label { font-size: 12px; color: var(--muted); }
+#playBtn { min-width: 64px; }
+
+/* Timeline */
+.timeline { padding: 6px 12px 12px; background: var(--panel); flex: 0 0 auto; }
+.track {
+  position: relative; height: 36px; background: var(--track); border-radius: 6px; cursor: pointer;
+  touch-action: none; user-select: none;
+}
+.loop-region { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 22%, transparent); border-left: 2px solid var(--accent); border-right: 2px solid var(--accent); pointer-events: none; }
+.marker {
+  position: absolute; top: 4px; bottom: 4px; width: 4px; margin-left: -2px; border-radius: 2px; border: 0; padding: 0;
+  cursor: pointer; opacity: .95;
+}
+.marker:hover, .marker.sel { top: 0; bottom: 0; width: 6px; margin-left: -3px; opacity: 1; z-index: 2; }
+.marker.dim { opacity: .18; }
+.marker.has-drawing::after {
+  content: ""; position: absolute; left: 50%; top: -5px; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%;
+  background: inherit; box-shadow: 0 0 0 1.5px var(--panel);
+}
+.playhead { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; z-index: 3; }
+.playhead::before { content: ""; position: absolute; top: -4px; left: -4px; border: 5px solid transparent; border-top-color: var(--text); }
+
+/* Sidebar */
+.tabs { display: flex; border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+.tabs button { flex: 1; border: 0; background: transparent; padding: 10px 6px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; }
+.tabs button.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.panel { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.panel h3 { margin: 6px 0 2px; font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+.panel p.hint, .hint { color: var(--muted); font-size: 12px; margin: 0; }
+.row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.filters { display: flex; flex-wrap: wrap; gap: 5px; }
+.fchip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--panel-2);
+}
+.fchip .dot { width: 9px; height: 9px; border-radius: 50%; }
+.fchip.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--panel-2)); }
+.fchip .n { color: var(--muted); }
+.notes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.note {
+  display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 6px; align-items: center;
+  padding: 6px; border-radius: 8px; border: 1px solid transparent; background: var(--panel-2); cursor: pointer;
+}
+.note:hover { border-color: var(--border); }
+.note.active { box-shadow: inset 3px 0 0 var(--accent); }
+.note.sel { border-color: var(--accent); }
+.note .time { font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; border: 0; background: transparent; padding: 2px 4px; cursor: pointer; color: var(--accent); }
+.chip {
+  appearance: none; -webkit-appearance: none; border: 0; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 600;
+  max-width: 130px; cursor: pointer; text-overflow: ellipsis;
+}
+.note .text { overflow-wrap: anywhere; min-height: 1.4em; }
+.note .text.placeholder { color: var(--muted); font-style: italic; }
+.note .text input { width: 100%; }
+.note .acts { display: flex; gap: 2px; align-items: center; }
+.note .draw-ic { font-size: 12px; color: var(--muted); }
+.empty-list { color: var(--muted); text-align: center; padding: 24px 8px; }
+table.stats { width: 100%; border-collapse: collapse; }
+table.stats td, table.stats th { padding: 6px 4px; border-bottom: 1px solid var(--border); text-align: left; }
+table.stats td.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.big { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.big div { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+.big b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.big span { color: var(--muted); font-size: 12px; }
+.cmd {
+  width: 100%; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; resize: vertical; white-space: pre; overflow: auto;
+}
+.tag-edit { display: grid; grid-template-columns: 34px minmax(0,1fr) 44px auto; gap: 6px; align-items: center; }
+.tag-edit input[type=color] { width: 34px; height: 30px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: none; }
+.tag-edit input.key { text-align: center; text-transform: uppercase; }
+.field { display: grid; grid-template-columns: minmax(0,1fr) 90px; gap: 8px; align-items: center; }
+
+/* Modal, tooltip, toasts */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+.modal .box { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); max-width: 640px; width: 100%; max-height: 90vh; overflow: auto; padding: 18px; }
+.modal h2 { margin: 0 0 10px; font-size: 18px; }
+.keys { width: 100%; border-collapse: collapse; }
+.keys td { padding: 5px 4px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.keys td:first-child { white-space: nowrap; width: 40%; }
+.tooltip {
+  position: fixed; z-index: 60; pointer-events: none; background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow);
+  border-radius: 8px; padding: 6px 8px; max-width: 280px; font-size: 12px; transform: translate(-50%, calc(-100% - 10px));
+}
+.tooltip b { color: var(--accent); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+#toasts { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 70; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; }
+.toast {
+  pointer-events: auto; background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent); box-shadow: var(--shadow);
+  border-radius: 8px; padding: 8px 12px; display: flex; gap: 10px; align-items: center; animation: tin .15s ease-out;
+}
+.toast.error { border-left-color: var(--danger); }
+@keyframes tin { from { opacity: 0; transform: translateY(6px); } }
+
+@media (max-width: 800px) {
+  body { overflow: auto; height: auto; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .viewer { border-right: 0; border-bottom: 1px solid var(--border); }
+  .stage { flex: none; aspect-ratio: 16 / 9; min-height: 0; }
+  .sidebar { min-height: 70vh; }
+  .top { padding: 8px 16px; flex-wrap: wrap; }
+  .controls, .timeline { padding-left: 16px; padding-right: 16px; }
+  .entry { flex-wrap: wrap; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="ball" aria-hidden="true"></span>Game Reviewer</div>
+  <button id="openBtn" class="btn primary">Open video</button>
+  <input type="file" id="fileInput" accept="video/*,.mp4,.m4v,.mov,.webm,.mkv" hidden>
+  <div id="fileName" class="file-name">No video loaded</div>
+  <div class="spacer"></div>
+  <button id="themeBtn" class="btn ghost" title="Switch light / dark theme">◐ Theme</button>
+  <button id="helpBtn" class="btn ghost" title="Keyboard shortcuts (?)">? Keys</button>
+</header>
+
+<main class="layout">
+  <section class="viewer">
+    <div class="stage" id="stage">
+      <video id="video" playsinline preload="auto"></video>
+      <img id="drawShow" class="overlay" alt="" hidden>
+      <canvas id="drawCanvas" class="overlay" hidden></canvas>
+      <div id="empty" class="empty">
+        <h2>Drop a game video here</h2>
+        <p>Or use <b>Open video</b>. The video plays from your computer and is never uploaded. Notes are saved in this browser.</p>
+        <button class="btn primary" id="openBtn2">Open video</button>
+        <p class="hint">Press <kbd>?</kbd> for keyboard shortcuts.</p>
+      </div>
+      <div id="drawBar" class="drawbar" hidden>
+        <div class="seg" id="toolSeg">
+          <button data-tool="arrow" title="Arrow (1)">↗ Arrow</button>
+          <button data-tool="circle" title="Circle (2)">◯ Circle</button>
+          <button data-tool="line" title="Line (3)">／ Line</button>
+          <button data-tool="free" title="Freehand (4)">✎ Free</button>
+        </div>
+        <div class="row" id="swatches"></div>
+        <button class="btn small" id="undoBtn" title="Undo (Z)">Undo</button>
+        <button class="btn small" id="clearBtn">Clear</button>
+        <span class="sep"></span>
+        <input type="text" id="drawText" placeholder="Note for this drawing">
+        <button class="btn small primary" id="drawSave" title="Save drawing as a note (Enter)">Save</button>
+        <button class="btn small" id="drawPng" title="Download this frame + drawing as PNG">PNG</button>
+        <button class="btn small" id="drawClose" title="Close (Esc or D)">Close</button>
+      </div>
+      <div id="entry" class="entry" hidden>
+        <span class="entry-time" id="entryTime">0:00</span>
+        <select id="entryTag" aria-label="Tag"></select>
+        <input type="text" id="entryText" placeholder="What happened? Enter saves · Esc cancels" autocomplete="off">
+        <button class="btn primary" id="entrySave">Save</button>
+      </div>
+      <div id="playlistBar" class="playlist-bar" hidden>
+        <span id="playlistLabel"></span>
+        <button class="btn small" id="plPrev">‹ Prev</button>
+        <button class="btn small" id="plNext">Next ›</button>
+        <button class="btn small" id="plStop">Stop (Esc)</button>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn" data-skip="-15" title="Back 15s (Shift+←)">−15s</button>
+      <button class="btn" data-skip="-5" title="Back 5s (←)">−5s</button>
+      <button class="btn" data-frame="-1" title="Frame back (,)">‹ frame</button>
+      <button class="btn primary" id="playBtn" title="Play / pause (Space)">Play</button>
+      <button class="btn" data-frame="1" title="Frame forward (.)">frame ›</button>
+      <button class="btn" data-skip="5" title="Forward 5s (→)">+5s</button>
+      <button class="btn" data-skip="15" title="Forward 15s (Shift+→)">+15s</button>
+      <div class="seg" id="speedSeg" title="Speed ([ and ])"></div>
+      <span class="time-label" id="timeLabel">0:00 / 0:00</span>
+      <span class="spacer"></span>
+      <button class="btn small" id="loopABtn" title="Set loop start (A)">A</button>
+      <button class="btn small" id="loopBBtn" title="Set loop end (B)">B</button>
+      <button class="btn small" id="loopBtn" title="Toggle loop (L)">Loop</button>
+      <span class="loop-label" id="loopLabel"></span>
+      <button class="btn" id="noteBtn" title="Add note (N)">+ Note</button>
+      <button class="btn" id="drawBtn" title="Draw on frame (D)">✎ Draw</button>
+    </div>
+    <div class="timeline">
+      <div class="track" id="track" title="">
+        <div class="loop-region" id="loopRegion" hidden></div>
+        <div id="markers"></div>
+        <div class="playhead" id="playhead"></div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="sidebar">
+    <nav class="tabs" id="tabs">
+      <button data-tab="notes" class="active">Notes</button>
+      <button data-tab="stats">Stats</button>
+      <button data-tab="export">Export</button>
+      <button data-tab="settings">Settings</button>
+    </nav>
+
+    <div class="panel" data-panel="notes">
+      <input type="search" id="search" placeholder="Search notes…" aria-label="Search notes">
+      <div class="filters" id="filters"></div>
+      <div class="row">
+        <button class="btn primary small" id="playlistBtn" title="Play only the filtered moments">▶ Play filtered</button>
+        <span class="hint" id="countLabel"></span>
+      </div>
+      <ul class="notes" id="noteList"></ul>
+    </div>
+
+    <div class="panel" data-panel="stats" hidden>
+      <div id="statsBox"></div>
+    </div>
+
+    <div class="panel" data-panel="export" hidden>
+      <h3>Notes files</h3>
+      <div class="row">
+        <button class="btn" data-export="srt">Subtitles .srt</button>
+        <button class="btn" data-export="vtt">.vtt</button>
+        <button class="btn" data-export="csv">Spreadsheet .csv</button>
+        <button class="btn" data-export="md">Summary .md</button>
+      </div>
+      <p class="hint">To see notes over the video in VLC, keep the <code>.srt</code> in the same folder as the video with the same name, e.g. <code>game.mp4</code> + <code>game.srt</code>.</p>
+      <h3>Backup</h3>
+      <div class="row">
+        <button class="btn" data-export="json">Download backup .json</button>
+        <button class="btn" id="importBtn">Import backup…</button>
+        <input type="file" id="importInput" accept=".json,application/json" hidden>
+      </div>
+      <p class="hint">Notes live in this browser only. Clearing browser data deletes them, so save a backup after each game.</p>
+      <h3>ffmpeg commands</h3>
+      <p class="hint">Paste these into Terminal from the folder that holds the video. Install ffmpeg with <code>brew install ffmpeg</code>. Export the .srt first.</p>
+      <label class="hint">Add notes as a subtitle track (QuickTime: View → Subtitles). Fast, no re-encode.</label>
+      <textarea class="cmd" id="cmdTrack" rows="2" readonly></textarea>
+      <div class="row"><button class="btn small" data-copy="cmdTrack">Copy</button></div>
+      <label class="hint">Burn notes into the picture (slow, makes a new video)</label>
+      <textarea class="cmd" id="cmdBurn" rows="2" readonly></textarea>
+      <div class="row"><button class="btn small" data-copy="cmdBurn">Copy</button></div>
+      <label class="hint" id="clipsLabel">Cut each filtered moment into its own clip</label>
+      <textarea class="cmd" id="cmdClips" rows="6" readonly></textarea>
+      <div class="row"><button class="btn small" data-copy="cmdClips">Copy</button></div>
+      <p class="hint">Clips use <code>-c copy</code>, which is instant but starts at the nearest keyframe, so a clip may start up to a couple of seconds early.</p>
+    </div>
+
+    <div class="panel" data-panel="settings" hidden>
+      <h3>Timing</h3>
+      <label class="field"><span>Lead time: seconds subtracted from a note's time, since you notice a play after it happens</span><input type="number" id="setLead" min="0" max="30" step="0.5"></label>
+      <label class="field"><span>Playlist clip: seconds before the note</span><input type="number" id="setBefore" min="0" max="60" step="0.5"></label>
+      <label class="field"><span>Playlist clip: seconds after the note</span><input type="number" id="setAfter" min="0.5" max="120" step="0.5"></label>
+      <h3>Tags</h3>
+      <p class="hint">Press the hotkey to drop a tag without pausing. Shift + hotkey also opens a note. Keys N, D, A, B, L are taken.</p>
+      <div id="tagEditor" style="display:flex;flex-direction:column;gap:6px"></div>
+      <div class="row">
+        <button class="btn small" id="addTagBtn">+ Add tag</button>
+        <button class="btn small danger" id="resetTagsBtn">Reset to default tags</button>
+      </div>
+      <h3>This video</h3>
+      <div class="row"><button class="btn small danger" id="clearNotesBtn">Delete all notes for this video…</button></div>
+    </div>
+  </aside>
+</main>
+
+<div id="help" class="modal" hidden>
+  <div class="box" role="dialog" aria-label="Keyboard shortcuts">
+    <h2>Keyboard shortcuts</h2>
+    <table class="keys" id="keysTable"></table>
+    <p class="hint" style="margin-top:10px">Shortcuts are off while you type in a text box, except Enter and Esc. Press <kbd>?</kbd> or <kbd>Esc</kbd> to close.</p>
+  </div>
+</div>
+<div id="tooltip" class="tooltip" hidden></div>
+<div id="toasts"></div>
+
+<script>
+'use strict';
+
+/* ---------- Constants and settings ---------- */
+const FPS = 30;
+const SPEEDS = [0.25, 0.5, 1, 1.5, 2];
+const PREFIX = 'gameReviewer.v1.';
+const DRAW_HOLD = 3;          // seconds a drawing stays visible after its time
+const CUE_LEN = 4;            // subtitle cue length
+const MAX_DRAW_W = 960;       // drawing resolution cap, to keep storage small
+const COLORS = ['#ff3b30', '#ffd60a', '#32d7ff', '#ffffff'];
+const RESERVED = new Set(['n', 'd', 'a', 'b', 'l', 'z', ' ', ',', '.', '[', ']', '?', '/']);
+const DEFAULT_TAGS = [
+  { id: 'made',     name: 'My shot (made)',     key: '1', color: '#22c55e' },
+  { id: 'missed',   name: 'My shot (missed)',   key: '2', color: '#ef4444' },
+  { id: 'defense',  name: 'Good defense',       key: '3', color: '#3b82f6' },
+  { id: 'turnover', name: 'Turnover / mistake', key: '4', color: '#f97316' },
+  { id: 'decision', name: 'Good decision',      key: '5', color: '#a855f7' },
+  { id: 'learn',    name: 'Learn from this',    key: '6', color: '#eab308' },
+  { id: 'on',       name: 'On court',           key: '7', color: '#14b8a6' },
+  { id: 'off',      name: 'Off court',          key: '8', color: '#94a3b8' },
+];
+
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const video = $('#video');
+
+const store = {
+  get(k, fallback) {
+    try { const v = localStorage.getItem(PREFIX + k); return v == null ? fallback : JSON.parse(v); }
+    catch { return fallback; }
+  },
+  set(k, v) {
+    try { localStorage.setItem(PREFIX + k, JSON.stringify(v)); return true; }
+    catch (e) {
+      toast('Could not save: browser storage is full or blocked. Download a JSON backup now.', 'error', 8000);
+      return false;
+    }
+  },
+};
+
+function loadSettings() {
+  const s = store.get('settings', {});
+  return {
+    leadTime: num(s.leadTime, 3),
+    clipBefore: num(s.clipBefore, 2),
+    clipAfter: num(s.clipAfter, 6),
+    theme: s.theme === 'light' ? 'light' : 'dark',
+    tags: Array.isArray(s.tags) && s.tags.length ? s.tags : clone(DEFAULT_TAGS),
+  };
+}
+function saveSettings() { store.set('settings', settings); }
+
+let settings = loadSettings();
+
+const state = {
+  url: null, fileName: '', baseName: '', key: null, notes: [],
+  filterTags: new Set(), search: '', selectedId: null, activeId: null,
+  loopA: null, loopB: null, loopOn: false,
+  entry: null, playlist: null, draw: null,
+  lastPosSave: 0, shownDrawing: null,
+};
+
+/* ---------- Helpers ---------- */
+function num(v, d) { const n = parseFloat(v); return Number.isFinite(n) ? n : d; }
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function hasVideo() { return !!state.key && Number.isFinite(video.duration) && video.duration > 0; }
+function dur() { return Number.isFinite(video.duration) ? video.duration : 0; }
+
+function fmt(t) {
+  t = Math.max(0, t || 0);
+  const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = Math.floor(t % 60);
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
+}
+function fmtTenth(t) { return fmt(t) + '.' + Math.floor((Math.max(0, t) % 1) * 10); }
+function fmtStamp(t, sep = '.') {
+  const ms = Math.round(Math.max(0, t) * 1000);
+  const h = Math.floor(ms / 3600000), m = Math.floor(ms % 3600000 / 60000), s = Math.floor(ms % 60000 / 1000), r = ms % 1000;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}${sep}${String(r).padStart(3, '0')}`;
+}
+function fileStamp(t) {
+  t = Math.max(0, t || 0);
+  const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = Math.floor(t % 60);
+  return (h ? h + 'h' : '') + String(m).padStart(2, '0') + 'm' + String(s).padStart(2, '0') + 's';
+}
+function slug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'note'; }
+
+function tagById(id) { return settings.tags.find(t => t.id === id) || null; }
+function tagName(id) { const t = tagById(id); return t ? t.name : ''; }
+function textColor(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return '#fff';
+  const n = parseInt(m[1], 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? '#111' : '#fff';
+}
+function noteColor(n) { const t = tagById(n.tag); return t ? t.color : '#cbd5e1'; }
+function noteLabel(n) {
+  const name = tagName(n.tag);
+  if (name && n.text) return `[${name}] ${n.text}`;
+  return name ? `[${name}]` : (n.text || (n.drawing ? '[Drawing]' : ''));
+}
+
+function toast(msg, kind = '', ms = 2200, action) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind ? ' ' + kind : '');
+  el.innerHTML = `<span>${esc(msg)}</span>`;
+  if (action) {
+    const b = document.createElement('button');
+    b.className = 'btn small'; b.textContent = action.label;
+    b.onclick = () => { action.fn(); el.remove(); };
+    el.appendChild(b);
+  }
+  $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), ms);
+  const all = $$('#toasts .toast'); if (all.length > 4) all[0].remove();
+}
+
+function download(name, content, type = 'text/plain') {
+  const blob = content instanceof Blob ? content : new Blob([content], { type: type + ';charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); toast('Copied'); return; } catch {}
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); toast('Copied'); } catch { toast('Copy failed: select the text and press Cmd+C', 'error'); }
+  ta.remove();
+}
+
+/* ---------- Video loading ---------- */
+function openFile(file) {
+  if (!file) return;
+  if (file.type && !file.type.startsWith('video/') && !/\.(mp4|m4v|mov|webm|mkv)$/i.test(file.name)) {
+    toast('That does not look like a video file.', 'error'); return;
+  }
+  stopPlaylist(true); exitDraw(true); closeEntry(false);
+  if (state.url) URL.revokeObjectURL(state.url);
+  state.url = URL.createObjectURL(file);
+  state.fileName = file.name;
+  state.baseName = file.name.replace(/\.[^.]+$/, '');
+  state.key = null; state.notes = []; state.selectedId = null; state.activeId = null;
+  state.loopA = state.loopB = null; state.loopOn = false;
+  $('#fileName').textContent = file.name;
+  video.src = state.url;
+  video.load();
+}
+
+video.addEventListener('loadedmetadata', () => {
+  state.key = 'notes:' + state.fileName + '|' + Math.round(video.duration);
+  const saved = store.get(state.key, null);
+  state.notes = saved && Array.isArray(saved.notes) ? saved.notes : [];
+  sortNotes();
+  $('#empty').hidden = true;
+  video.playbackRate = 1;
+  const pos = store.get('pos:' + state.key, 0);
+  if (pos > 5 && pos < video.duration - 5) {
+    video.currentTime = pos;
+    toast(`Resumed at ${fmt(pos)}` + (state.notes.length ? ` · ${state.notes.length} notes restored` : ''));
+  } else if (state.notes.length) {
+    toast(`${state.notes.length} notes restored`);
+  }
+  layoutOverlays(); renderAll();
+});
+video.addEventListener('error', () => {
+  if (!state.url) return;
+  toast('This browser cannot play that file. MP4 (H.264) and MOV work best; iPhone HEVC videos may only play in Safari.', 'error', 8000);
+});
+video.addEventListener('play', updatePlayBtn);
+video.addEventListener('pause', updatePlayBtn);
+video.addEventListener('ratechange', renderSpeed);
+video.addEventListener('ended', () => { if (state.playlist) stopPlaylist(); });
+video.addEventListener('click', () => { if (hasVideo() && !state.draw) togglePlay(); });
+
+$('#openBtn').onclick = $('#openBtn2').onclick = () => $('#fileInput').click();
+$('#fileInput').onchange = e => { openFile(e.target.files[0]); e.target.value = ''; };
+
+const stage = $('#stage');
+['dragenter', 'dragover'].forEach(ev => window.addEventListener(ev, e => {
+  if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) { e.preventDefault(); stage.classList.add('dragover'); }
+}));
+['dragleave', 'drop'].forEach(ev => window.addEventListener(ev, e => {
+  if (ev === 'dragleave' && e.relatedTarget) return;
+  stage.classList.remove('dragover');
+}));
+window.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = e.dataTransfer && e.dataTransfer.files[0];
+  if (!f) return;
+  if (/\.json$/i.test(f.name)) importJSON(f); else openFile(f);
+});
+
+/* ---------- Notes data ---------- */
+function sortNotes() { state.notes.sort((a, b) => a.t - b.t); }
+function saveNotes() {
+  if (!state.key) return;
+  store.set(state.key, { app: 'game-reviewer', video: { name: state.fileName, duration: dur() }, notes: state.notes });
+}
+function addNote(n) {
+  const note = { id: uid(), t: clamp(n.t, 0, dur()), tag: n.tag || null, text: n.text || '', drawing: n.drawing || null, created: Date.now() };
+  state.notes.push(note); sortNotes(); saveNotes(); renderAll();
+  return note;
+}
+function updateNote(id, patch) {
+  const n = state.notes.find(x => x.id === id); if (!n) return;
+  Object.assign(n, patch); sortNotes(); saveNotes(); renderAll();
+}
+function deleteNote(id, ask = true) {
+  const n = state.notes.find(x => x.id === id); if (!n) return;
+  if (ask && !confirm(`Delete the note at ${fmt(n.t)}?\n\n${noteLabel(n) || '(empty)'}`)) return;
+  state.notes = state.notes.filter(x => x.id !== id);
+  if (state.selectedId === id) state.selectedId = null;
+  saveNotes(); renderAll();
+}
+function filteredNotes() {
+  const q = state.search.trim().toLowerCase();
+  return state.notes.filter(n => {
+    if (state.filterTags.size) {
+      const k = n.tag && tagById(n.tag) ? n.tag : '__none';
+      if (!state.filterTags.has(k)) return false;
+    }
+    if (q) {
+      const hay = (n.text + ' ' + tagName(n.tag)).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+/* ---------- Playback ---------- */
+function togglePlay() { if (video.paused) video.play().catch(() => {}); else video.pause(); }
+function seek(t) { if (!hasVideo()) return; video.currentTime = clamp(t, 0, dur()); }
+function skip(s) { seek(video.currentTime + s); }
+function frame(d) { video.pause(); seek(video.currentTime + d / FPS); }
+function setSpeed(r) { video.playbackRate = r; toast(`Speed ${r}×`, '', 900); }
+function speedStep(d) {
+  let i = SPEEDS.indexOf(video.playbackRate);
+  if (i < 0) i = SPEEDS.indexOf(1);
+  setSpeed(SPEEDS[clamp(i + d, 0, SPEEDS.length - 1)]);
+}
+function updatePlayBtn() { $('#playBtn').textContent = video.paused ? 'Play' : 'Pause'; }
+function renderSpeed() {
+  $('#speedSeg').innerHTML = SPEEDS.map(s => `<button data-speed="${s}" class="${video.playbackRate === s ? 'on' : ''}">${s}×</button>`).join('');
+}
+$('#speedSeg').onclick = e => { const b = e.target.closest('[data-speed]'); if (b && hasVideo()) setSpeed(parseFloat(b.dataset.speed)); };
+$('#playBtn').onclick = () => hasVideo() && togglePlay();
+$$('[data-skip]').forEach(b => b.onclick = () => skip(+b.dataset.skip));
+$$('[data-frame]').forEach(b => b.onclick = () => hasVideo() && frame(+b.dataset.frame));
+
+/* Loop */
+function setLoopPoint(which) {
+  if (!hasVideo()) return;
+  const t = video.currentTime;
+  if (which === 'a') state.loopA = t; else state.loopB = t;
+  if (state.loopA != null && state.loopB != null && state.loopA > state.loopB) [state.loopA, state.loopB] = [state.loopB, state.loopA];
+  if (state.loopA != null && state.loopB != null && state.loopB - state.loopA < 0.2) state.loopOn = false;
+  toast(`Loop ${which.toUpperCase()} set at ${fmtTenth(t)}`, '', 1200);
+  renderLoop();
+}
+function toggleLoop() {
+  if (state.loopA == null || state.loopB == null || state.loopB - state.loopA < 0.2) {
+    toast('Set loop start with A and loop end with B first', '', 2000); return;
+  }
+  state.loopOn = !state.loopOn;
+  if (state.loopOn && (video.currentTime < state.loopA || video.currentTime > state.loopB)) seek(state.loopA);
+  toast(state.loopOn ? 'Loop on' : 'Loop off', '', 1000);
+  renderLoop();
+}
+function renderLoop() {
+  const r = $('#loopRegion'), d = dur();
+  $('#loopBtn').classList.toggle('on', state.loopOn);
+  $('#loopABtn').classList.toggle('on', state.loopA != null);
+  $('#loopBBtn').classList.toggle('on', state.loopB != null);
+  const parts = [];
+  if (state.loopA != null) parts.push('A ' + fmtTenth(state.loopA));
+  if (state.loopB != null) parts.push('B ' + fmtTenth(state.loopB));
+  $('#loopLabel').textContent = parts.join(' – ');
+  if (d && state.loopA != null && state.loopB != null) {
+    r.hidden = false;
+    r.style.left = (state.loopA / d * 100) + '%';
+    r.style.width = ((state.loopB - state.loopA) / d * 100) + '%';
+    r.style.opacity = state.loopOn ? 1 : .45;
+  } else r.hidden = true;
+}
+$('#loopABtn').onclick = () => setLoopPoint('a');
+$('#loopBBtn').onclick = () => setLoopPoint('b');
+$('#loopBtn').onclick = toggleLoop;
+
+/* ---------- Fast note entry ---------- */
+function stampNow() { return clamp(video.currentTime - settings.leadTime, 0, dur()); }
+
+function openEntry({ tag = null, noteId = null } = {}) {
+  if (!hasVideo()) return;
+  if (state.draw) return;
+  const wasPlaying = state.entry ? state.entry.wasPlaying : !video.paused;
+  video.pause();
+  const existing = noteId ? state.notes.find(n => n.id === noteId) : null;
+  const t = existing ? existing.t : stampNow();
+  state.entry = { t, noteId, wasPlaying };
+  $('#entryTime').textContent = fmt(t);
+  renderTagSelect($('#entryTag'), existing ? existing.tag : tag);
+  $('#entryText').value = existing ? existing.text : '';
+  $('#entry').hidden = false;
+  $('#entryText').focus();
+}
+function saveEntry() {
+  const e = state.entry; if (!e) return;
+  const text = $('#entryText').value.trim();
+  const tag = $('#entryTag').value || null;
+  if (e.noteId) updateNote(e.noteId, { text, tag });
+  else if (text || tag) { addNote({ t: e.t, tag, text }); }
+  closeEntry(true);
+}
+function closeEntry(resume) {
+  const e = state.entry; if (!e) return;
+  state.entry = null;
+  $('#entry').hidden = true;
+  $('#entryText').blur();
+  if (resume && e.wasPlaying) video.play().catch(() => {});
+}
+$('#entry').addEventListener('keydown', ev => {
+  if (ev.key === 'Enter') { ev.preventDefault(); saveEntry(); }
+  else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); closeEntry(true); }
+});
+$('#entrySave').onclick = saveEntry;
+$('#noteBtn').onclick = () => openEntry();
+
+function quickTag(tag, withNote) {
+  const n = addNote({ t: stampNow(), tag: tag.id, text: '' });
+  if (withNote) { openEntry({ noteId: n.id }); return; }
+  toast(`${tag.name} · ${fmt(n.t)}`, '', 1800, { label: 'Undo', fn: () => deleteNote(n.id, false) });
+}
+
+function renderTagSelect(sel, value) {
+  sel.innerHTML = '<option value="">No tag</option>' +
+    settings.tags.map(t => `<option value="${esc(t.id)}">${esc(t.key.toUpperCase())} · ${esc(t.name)}</option>`).join('');
+  sel.value = value && tagById(value) ? value : '';
+}
+
+/* ---------- Playlist ---------- */
+function buildClips(notes) {
+  const d = dur(), clips = [];
+  notes.slice().sort((a, b) => a.t - b.t).forEach(n => {
+    const start = clamp(n.t - settings.clipBefore, 0, d), end = clamp(n.t + settings.clipAfter, 0, d);
+    const last = clips[clips.length - 1];
+    if (last && start <= last.end) { last.end = Math.max(last.end, end); last.ids.push(n.id); }
+    else clips.push({ start, end, ids: [n.id] });
+  });
+  return clips;
+}
+function startPlaylist() {
+  if (!hasVideo()) return;
+  const notes = filteredNotes();
+  if (!notes.length) { toast('No notes match the filter'); return; }
+  closeEntry(false); exitDraw(true);
+  state.loopOn = false; renderLoop();
+  state.playlist = { clips: buildClips(notes), i: 0 };
+  gotoClip(0);
+  video.play().catch(() => {});
+}
+function gotoClip(i) {
+  const p = state.playlist; if (!p) return;
+  if (i >= p.clips.length) { stopPlaylist(); video.pause(); toast('Playlist finished'); return; }
+  p.i = Math.max(0, i);
+  seek(p.clips[p.i].start);
+  const c = p.clips[p.i];
+  $('#playlistLabel').textContent = `Playlist · clip ${p.i + 1} of ${p.clips.length} · ${fmt(c.start)}–${fmt(c.end)}`;
+  $('#playlistBar').hidden = false;
+}
+function stopPlaylist(silent) {
+  if (!state.playlist) return;
+  state.playlist = null; $('#playlistBar').hidden = true;
+  if (!silent) toast('Playlist stopped', '', 1000);
+}
+$('#playlistBtn').onclick = startPlaylist;
+$('#plPrev').onclick = () => state.playlist && gotoClip(state.playlist.i - 1);
+$('#plNext').onclick = () => state.playlist && gotoClip(state.playlist.i + 1);
+$('#plStop').onclick = () => stopPlaylist();
+
+/* ---------- Overlay layout ---------- */
+function contentRect() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  const vw = video.videoWidth || 16, vh = video.videoHeight || 9;
+  const s = Math.min(w / vw, h / vh);
+  const dw = vw * s, dh = vh * s;
+  return { left: (w - dw) / 2, top: (h - dh) / 2, width: dw, height: dh };
+}
+function layoutOverlays() {
+  const r = contentRect();
+  [$('#drawCanvas'), $('#drawShow')].forEach(el => {
+    el.style.left = r.left + 'px'; el.style.top = r.top + 'px';
+    el.style.width = r.width + 'px'; el.style.height = r.height + 'px';
+  });
+}
+new ResizeObserver(layoutOverlays).observe(stage);
+
+/* ---------- Drawing ---------- */
+const canvas = $('#drawCanvas'), cx = canvas.getContext('2d');
+function drawSize() {
+  const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+  const w = Math.min(vw, MAX_DRAW_W);
+  return { w, h: Math.round(vh * w / vw) };
+}
+function enterDraw() {
+  if (!hasVideo() || state.draw) return;
+  closeEntry(false); stopPlaylist(true);
+  video.pause();
+  const { w, h } = drawSize();
+  canvas.width = w; canvas.height = h;
+  state.draw = { shapes: [], tool: state.lastTool || 'arrow', color: state.lastColor || COLORS[0], cur: null, t: video.currentTime };
+  layoutOverlays();
+  canvas.hidden = false; $('#drawBar').hidden = false; $('#drawShow').hidden = true;
+  $('#drawText').value = '';
+  renderDrawBar(); renderDrawing();
+  $('#drawBtn').classList.add('on');
+}
+function exitDraw(force) {
+  if (!state.draw) return;
+  if (!force && state.draw.shapes.length && !confirm('Discard this drawing?')) return;
+  state.draw = null;
+  canvas.hidden = true; $('#drawBar').hidden = true;
+  $('#drawText').blur();
+  $('#drawBtn').classList.remove('on');
+}
+function renderDrawBar() {
+  const d = state.draw; if (!d) return;
+  $$('#toolSeg button').forEach(b => b.classList.toggle('on', b.dataset.tool === d.tool));
+  $('#swatches').innerHTML = COLORS.map(c => `<button class="sw ${c === d.color ? 'on' : ''}" data-color="${c}" style="background:${c}" title="Colour"></button>`).join('');
+}
+function setTool(t) { if (!state.draw) return; state.draw.tool = state.lastTool = t; renderDrawBar(); }
+$('#toolSeg').onclick = e => { const b = e.target.closest('[data-tool]'); if (b) setTool(b.dataset.tool); };
+$('#swatches').onclick = e => {
+  const b = e.target.closest('[data-color]'); if (!b || !state.draw) return;
+  state.draw.color = state.lastColor = b.dataset.color; renderDrawBar();
+};
+$('#undoBtn').onclick = () => { if (state.draw) { state.draw.shapes.pop(); renderDrawing(); } };
+$('#clearBtn').onclick = () => { if (state.draw) { state.draw.shapes = []; renderDrawing(); } };
+$('#drawClose').onclick = () => exitDraw();
+$('#drawSave').onclick = saveDrawing;
+$('#drawPng').onclick = () => exportPNG(canvas);
+$('#drawText').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); saveDrawing(); }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); e.target.blur(); }
+});
+$('#drawBtn').onclick = () => state.draw ? exitDraw() : enterDraw();
+
+function canvasPoint(e) {
+  const r = canvas.getBoundingClientRect();
+  return [(e.clientX - r.left) * canvas.width / r.width, (e.clientY - r.top) * canvas.height / r.height];
+}
+canvas.addEventListener('pointerdown', e => {
+  const d = state.draw; if (!d) return;
+  canvas.setPointerCapture(e.pointerId);
+  const p = canvasPoint(e);
+  d.cur = { type: d.tool, color: d.color, w: Math.max(3, canvas.width / 220), pts: [p, p] };
+  renderDrawing();
+});
+canvas.addEventListener('pointermove', e => {
+  const d = state.draw; if (!d || !d.cur) return;
+  const p = canvasPoint(e);
+  if (d.cur.type === 'free') d.cur.pts.push(p); else d.cur.pts[1] = p;
+  renderDrawing();
+});
+const endStroke = () => {
+  const d = state.draw; if (!d || !d.cur) return;
+  const [a, b] = [d.cur.pts[0], d.cur.pts[d.cur.pts.length - 1]];
+  if (d.cur.type === 'free' ? d.cur.pts.length > 2 : Math.hypot(b[0] - a[0], b[1] - a[1]) > 4) d.shapes.push(d.cur);
+  d.cur = null; renderDrawing();
+};
+canvas.addEventListener('pointerup', endStroke);
+canvas.addEventListener('pointercancel', endStroke);
+
+function drawShape(ctx, s) {
+  ctx.save();
+  ctx.strokeStyle = ctx.fillStyle = s.color; ctx.lineWidth = s.w; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(0,0,0,.65)'; ctx.shadowBlur = s.w * 1.2;
+  const [a, b] = [s.pts[0], s.pts[s.pts.length - 1]];
+  ctx.beginPath();
+  if (s.type === 'free') {
+    ctx.moveTo(s.pts[0][0], s.pts[0][1]);
+    for (const p of s.pts) ctx.lineTo(p[0], p[1]);
+    ctx.stroke();
+  } else if (s.type === 'line') {
+    ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  } else if (s.type === 'circle') {
+    const rx = Math.abs(b[0] - a[0]) / 2, ry = Math.abs(b[1] - a[1]) / 2;
+    ctx.ellipse((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, Math.max(rx, 1), Math.max(ry, 1), 0, 0, Math.PI * 2); ctx.stroke();
+  } else if (s.type === 'arrow') {
+    const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), h = s.w * 4.5;
+    ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0] - Math.cos(ang) * h * .6, b[1] - Math.sin(ang) * h * .6); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(b[0], b[1]);
+    ctx.lineTo(b[0] - h * Math.cos(ang - .42), b[1] - h * Math.sin(ang - .42));
+    ctx.lineTo(b[0] - h * Math.cos(ang + .42), b[1] - h * Math.sin(ang + .42));
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+function renderDrawing() {
+  cx.clearRect(0, 0, canvas.width, canvas.height);
+  const d = state.draw; if (!d) return;
+  d.shapes.forEach(s => drawShape(cx, s));
+  if (d.cur) drawShape(cx, d.cur);
+}
+function saveDrawing() {
+  const d = state.draw; if (!d) return;
+  if (!d.shapes.length) { toast('Draw something first'); return; }
+  // WebP is much smaller; fall back to PNG where the browser can't encode it.
+  let dataUrl = canvas.toDataURL('image/webp', 0.85);
+  if (!dataUrl.startsWith('data:image/webp')) dataUrl = canvas.toDataURL('image/png');
+  const text = $('#drawText').value.trim();
+  const t = video.currentTime;
+  const sel = state.notes.find(n => n.id === state.selectedId && Math.abs(n.t - t) < 0.25);
+  if (sel) {
+    updateNote(sel.id, { drawing: dataUrl, text: text ? (sel.text ? sel.text + ' ' : '') + text : sel.text });
+    toast(`Drawing added to note at ${fmt(sel.t)}`);
+  } else {
+    const n = addNote({ t, text, drawing: dataUrl });
+    state.selectedId = n.id;
+    toast(`Drawing saved at ${fmt(t)}`);
+  }
+  exitDraw(true); renderAll();
+}
+
+/* Show saved drawings when playback is at their time */
+function updateDrawShow(ct) {
+  const img = $('#drawShow');
+  if (state.draw) { if (!img.hidden) img.hidden = true; return; }
+  let found = null;
+  for (const n of state.notes) {
+    if (!n.drawing) continue;
+    if (n.t - 0.05 <= ct && ct < n.t + DRAW_HOLD) found = n;
+    else if (n.t > ct) break;
+  }
+  const src = found ? found.drawing : null;
+  if (src !== state.shownDrawing) {
+    state.shownDrawing = src;
+    if (src) { img.src = src; img.hidden = false; } else { img.hidden = true; img.removeAttribute('src'); }
+  }
+}
+
+async function exportPNG(source, t) {
+  if (!hasVideo()) return;
+  if (t != null && Math.abs(video.currentTime - t) > 0.01) {
+    video.pause();
+    await new Promise(res => { video.addEventListener('seeked', res, { once: true }); seek(t); });
+  }
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const out = document.createElement('canvas'); out.width = vw; out.height = vh;
+  const o = out.getContext('2d');
+  o.drawImage(video, 0, 0, vw, vh);
+  if (source) o.drawImage(source, 0, 0, vw, vh);
+  out.toBlob(b => {
+    if (!b) { toast('Could not export this frame', 'error'); return; }
+    download(`${state.baseName}-${fileStamp(video.currentTime)}.png`, b);
+  }, 'image/png');
+}
+function exportNotePNG(n) {
+  const img = new Image();
+  img.onload = () => exportPNG(img, n.t);
+  img.src = n.drawing;
+}
+
+/* ---------- Rendering ---------- */
+function renderAll() {
+  renderFilters(); renderList(); renderTimeline(); renderStats(); renderCommands();
+}
+
+function renderFilters() {
+  const counts = {};
+  state.notes.forEach(n => { const k = n.tag && tagById(n.tag) ? n.tag : '__none'; counts[k] = (counts[k] || 0) + 1; });
+  const items = settings.tags.map(t => ({ id: t.id, name: t.name, color: t.color }));
+  items.push({ id: '__none', name: 'Untagged', color: '#cbd5e1' });
+  $('#filters').innerHTML = items.map(t =>
+    `<button class="fchip ${state.filterTags.has(t.id) ? 'on' : ''}" data-ftag="${esc(t.id)}"><span class="dot" style="background:${esc(t.color)}"></span>${esc(t.name)} <span class="n">${counts[t.id] || 0}</span></button>`
+  ).join('') + (state.filterTags.size ? '<button class="fchip" data-fclear="1">Clear filter</button>' : '');
+}
+$('#filters').onclick = e => {
+  if (e.target.closest('[data-fclear]')) { state.filterTags.clear(); renderAll(); return; }
+  const b = e.target.closest('[data-ftag]'); if (!b) return;
+  const id = b.dataset.ftag;
+  state.filterTags.has(id) ? state.filterTags.delete(id) : state.filterTags.add(id);
+  renderAll();
+};
+$('#search').addEventListener('input', e => { state.search = e.target.value; renderAll(); });
+$('#search').addEventListener('keydown', e => { if (e.key === 'Escape' || e.key === 'Enter') e.target.blur(); });
+
+function renderList() {
+  const list = filteredNotes();
+  $('#countLabel').textContent = state.notes.length
+    ? (list.length === state.notes.length ? `${list.length} notes` : `${list.length} of ${state.notes.length} notes`) : '';
+  $('#playlistBtn').disabled = !list.length || !hasVideo();
+  $('#playlistBtn').textContent = `▶ Play ${list.length === state.notes.length ? 'all' : 'filtered'} (${list.length})`;
+  if (!state.notes.length) {
+    $('#noteList').innerHTML = `<li class="empty-list">${hasVideo()
+      ? 'No notes yet. Press <kbd>N</kbd> to write a note, or <kbd>1</kbd>–<kbd>8</kbd> to drop a tag.'
+      : 'Open a video to start.'}</li>`;
+    return;
+  }
+  if (!list.length) { $('#noteList').innerHTML = '<li class="empty-list">No notes match.</li>'; return; }
+  $('#noteList').innerHTML = list.map(n => {
+    const t = tagById(n.tag);
+    const style = t ? `background:${t.color};color:${textColor(t.color)}` : 'background:var(--panel-3);color:var(--muted)';
+    const opts = '<option value="">No tag</option>' + settings.tags.map(x => `<option value="${esc(x.id)}" ${x.id === n.tag ? 'selected' : ''}>${esc(x.name)}</option>`).join('');
+    return `<li class="note ${n.id === state.selectedId ? 'sel' : ''} ${n.id === state.activeId ? 'active' : ''}" data-id="${n.id}">
+      <button class="time" title="Jump here">${fmt(n.t)}</button>
+      <select class="chip" style="${style}" aria-label="Tag">${opts}</select>
+      <div class="text ${n.text ? '' : 'placeholder'}" title="Click to edit">${n.text ? esc(n.text) : (n.drawing ? 'Drawing' : 'Add text…')}</div>
+      <div class="acts">
+        ${n.drawing ? `<button class="btn ghost small" data-png title="Download frame + drawing as PNG">✎ PNG</button>` : ''}
+        <button class="btn ghost small danger" data-del title="Delete">✕</button>
+      </div>
+    </li>`;
+  }).join('');
+}
+
+$('#noteList').addEventListener('click', e => {
+  const li = e.target.closest('.note'); if (!li) return;
+  const id = li.dataset.id, n = state.notes.find(x => x.id === id); if (!n) return;
+  if (e.target.closest('[data-del]')) { deleteNote(id); return; }
+  if (e.target.closest('[data-png]')) { exportNotePNG(n); return; }
+  if (e.target.closest('select')) return;
+  const textEl = e.target.closest('.text');
+  if (textEl && !textEl.querySelector('input')) { selectNote(n, false); editText(li, n); return; }
+  if (!e.target.closest('input')) selectNote(n, true);
+});
+$('#noteList').addEventListener('change', e => {
+  if (!e.target.matches('select.chip')) return;
+  const id = e.target.closest('.note').dataset.id;
+  updateNote(id, { tag: e.target.value || null });
+});
+
+function selectNote(n, doSeek) {
+  stopPlaylist(true);
+  state.selectedId = n.id;
+  if (doSeek) { video.pause(); seek(n.t); }
+  $$('#noteList .note').forEach(el => el.classList.toggle('sel', el.dataset.id === n.id));
+  renderTimeline();
+}
+function editText(li, n) {
+  const el = li.querySelector('.text');
+  const input = document.createElement('input');
+  input.type = 'text'; input.value = n.text; input.placeholder = 'Note text';
+  el.textContent = ''; el.classList.remove('placeholder'); el.appendChild(input); input.focus();
+  let done = false;
+  const finish = save => {
+    if (done) return; done = true;
+    if (save && input.value.trim() !== n.text) updateNote(n.id, { text: input.value.trim() });
+    else renderList();
+  };
+  input.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
+}
+
+function renderTimeline() {
+  const d = dur(), m = $('#markers');
+  if (!d) { m.innerHTML = ''; return; }
+  const visible = new Set(filteredNotes().map(n => n.id));
+  const filtering = state.filterTags.size || state.search.trim();
+  m.innerHTML = state.notes.map(n =>
+    `<button class="marker ${n.drawing ? 'has-drawing' : ''} ${filtering && !visible.has(n.id) ? 'dim' : ''} ${n.id === state.selectedId ? 'sel' : ''}" data-id="${n.id}" style="left:${n.t / d * 100}%;background:${esc(noteColor(n))}" aria-label="${esc(fmt(n.t) + ' ' + noteLabel(n))}"></button>`
+  ).join('');
+  renderLoop();
+}
+
+/* Timeline: click/drag to scrub, click marker to jump, hover for note text */
+const track = $('#track'), tip = $('#tooltip');
+let scrubbing = false;
+function trackTime(e) { const r = track.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width, 0, 1) * dur(); }
+track.addEventListener('pointerdown', e => {
+  if (!hasVideo()) return;
+  const mk = e.target.closest('.marker');
+  if (mk) {
+    const n = state.notes.find(x => x.id === mk.dataset.id);
+    if (n) { selectNote(n, true); const li = $(`#noteList .note[data-id="${n.id}"]`); li && li.scrollIntoView({ block: 'nearest' }); }
+    return;
+  }
+  scrubbing = true; track.setPointerCapture(e.pointerId); seek(trackTime(e));
+});
+track.addEventListener('pointermove', e => {
+  if (scrubbing) seek(trackTime(e));
+  const mk = e.target.closest('.marker');
+  if (mk && !scrubbing) {
+    const n = state.notes.find(x => x.id === mk.dataset.id); if (!n) return;
+    const r = mk.getBoundingClientRect();
+    tip.innerHTML = `<b>${fmt(n.t)}</b> ${esc(noteLabel(n) || '(no text)')}`;
+    tip.style.left = clamp(r.left + r.width / 2, 150, window.innerWidth - 150) + 'px';
+    tip.style.top = r.top + 'px';
+    tip.hidden = false;
+  } else tip.hidden = true;
+});
+track.addEventListener('pointerup', () => { scrubbing = false; });
+track.addEventListener('pointerleave', () => { tip.hidden = true; });
+
+/* ---------- Stats ---------- */
+function computeStats() {
+  const counts = {}; settings.tags.forEach(t => counts[t.id] = 0);
+  let untagged = 0;
+  state.notes.forEach(n => { if (n.tag && n.tag in counts) counts[n.tag]++; else untagged++; });
+  const made = counts.made || 0, missed = counts.missed || 0, att = made + missed;
+  const ev = state.notes.filter(n => n.tag === 'on' || n.tag === 'off');
+  let onAt = null, played = 0, stints = 0;
+  for (const e of ev) {
+    if (e.tag === 'on' && onAt == null) onAt = e.t;
+    else if (e.tag === 'off' && onAt != null) { played += e.t - onAt; onAt = null; stints++; }
+  }
+  const openEnd = onAt != null;
+  if (openEnd) { played += Math.max(0, dur() - onAt); stints++; }
+  return { counts, untagged, made, att, pct: att ? made / att * 100 : null, played, stints, openEnd, hasCourt: ev.length > 0 };
+}
+function renderStats() {
+  const s = computeStats();
+  const fg = s.att ? `${s.made}/${s.att}` : '–';
+  const rows = settings.tags.map(t => `<tr><td><span class="fchip" style="border:0;background:none;padding:0"><span class="dot" style="background:${esc(t.color)}"></span>${esc(t.name)}</span></td><td class="num">${s.counts[t.id]}</td></tr>`).join('');
+  $('#statsBox').innerHTML = `
+    <div class="big">
+      <div><b>${fg}</b><span>Field goals${s.pct != null ? ` · ${s.pct.toFixed(1)}%` : ''}</span></div>
+      <div><b>${s.hasCourt ? fmt(s.played) : '–'}</b><span>Minutes played${s.hasCourt ? ` · ${s.stints} stint${s.stints === 1 ? '' : 's'}` : ''}</span></div>
+    </div>
+    ${s.openEnd ? '<p class="hint" style="margin-top:8px">The last "On court" has no matching "Off court", so it counts until the end of the video.</p>' : ''}
+    ${!s.hasCourt ? '<p class="hint" style="margin-top:8px">Tag "On court" and "Off court" to track minutes played.</p>' : ''}
+    <h3 style="margin-top:14px">Tags</h3>
+    <table class="stats">${rows}<tr><td>Untagged notes</td><td class="num">${s.untagged}</td></tr><tr><th>Total</th><td class="num">${state.notes.length}</td></tr></table>`;
+}
+
+/* ---------- Export ---------- */
+function subtitleCues() {
+  const notes = state.notes.filter(n => noteLabel(n));
+  const d = dur();
+  return notes.map((n, i) => {
+    const next = notes.slice(i + 1).find(x => x.t > n.t + 0.05);
+    let end = n.t + CUE_LEN;
+    if (next && next.t < end) end = next.t;
+    if (d) end = Math.min(end, d);
+    if (end <= n.t) end = n.t + 0.5;
+    return { start: n.t, end, text: noteLabel(n) };
+  });
+}
+function toSRT() {
+  return subtitleCues().map((c, i) => `${i + 1}\n${fmtStamp(c.start, ',')} --> ${fmtStamp(c.end, ',')}\n${c.text.replace(/\n+/g, ' ')}\n`).join('\n');
+}
+function toVTT() {
+  return 'WEBVTT\n\n' + subtitleCues().map((c, i) => `${i + 1}\n${fmtStamp(c.start)} --> ${fmtStamp(c.end)}\n${c.text.replace(/\n+/g, ' ').replace(/-->/g, '->')}\n`).join('\n');
+}
+function csvCell(v) { const s = String(v ?? ''); return /[",\n\r]/.test(s) || /^[=+\-@]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }
+function toCSV() {
+  const rows = [['time', 'seconds', 'tag', 'note', 'has_drawing']];
+  state.notes.forEach(n => rows.push([fmtStamp(n.t), n.t.toFixed(3), tagName(n.tag), n.text, n.drawing ? 'yes' : '']));
+  return '﻿' + rows.map(r => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
+}
+function toMD() {
+  const s = computeStats();
+  const out = [`# Game review: ${state.fileName}`, '',
+    `Video length ${fmt(dur())} · ${state.notes.length} notes · exported ${new Date().toISOString().slice(0, 10)}`, '',
+    '## Stats', '',
+    `- **Field goals:** ${s.att ? `${s.made}/${s.att} (${s.pct.toFixed(1)}%)` : 'none logged'}`,
+    `- **Minutes played:** ${s.hasCourt ? fmt(s.played) + (s.openEnd ? ' (last stint runs to end of video)' : '') : 'not tracked'}`, '',
+    '| Tag | Count |', '|---|---:|',
+    ...settings.tags.map(t => `| ${t.name} | ${s.counts[t.id]} |`),
+    `| Untagged | ${s.untagged} |`, '',
+    '## Notes by tag', ''];
+  const groups = settings.tags.map(t => ({ name: t.name, notes: state.notes.filter(n => n.tag === t.id) }));
+  groups.push({ name: 'Untagged', notes: state.notes.filter(n => !tagById(n.tag)) });
+  groups.filter(g => g.notes.length).forEach(g => {
+    out.push(`### ${g.name} (${g.notes.length})`, '');
+    g.notes.forEach(n => out.push(`- **${fmt(n.t)}**${n.text ? ' ' + n.text.replace(/\n+/g, ' ') : ''}${n.drawing ? ' _(drawing)_' : ''}`));
+    out.push('');
+  });
+  return out.join('\n');
+}
+function toJSON() {
+  return JSON.stringify({
+    app: 'game-reviewer', version: 1, exported: new Date().toISOString(),
+    video: { name: state.fileName, duration: dur() },
+    tags: settings.tags, notes: state.notes,
+  }, null, 2);
+}
+$$('[data-export]').forEach(b => b.onclick = () => {
+  if (!hasVideo()) { toast('Open a video first'); return; }
+  const kind = b.dataset.export, base = state.baseName;
+  if (!state.notes.length && kind !== 'json') { toast('No notes to export yet'); return; }
+  if (kind === 'srt') download(base + '.srt', toSRT(), 'application/x-subrip');
+  if (kind === 'vtt') download(base + '.vtt', toVTT(), 'text/vtt');
+  if (kind === 'csv') download(base + '-notes.csv', toCSV(), 'text/csv');
+  if (kind === 'md') download(base + '-summary.md', toMD(), 'text/markdown');
+  if (kind === 'json') download(base + '-backup.json', toJSON(), 'application/json');
+});
+
+$('#importBtn').onclick = () => $('#importInput').click();
+$('#importInput').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) importJSON(f); };
+async function importJSON(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); } catch { toast('That file is not valid JSON', 'error'); return; }
+  if (!data || data.app !== 'game-reviewer' || !Array.isArray(data.notes)) { toast('That is not a Game Reviewer backup', 'error'); return; }
+  const notes = data.notes.filter(n => n && Number.isFinite(+n.t)).map(n => ({
+    id: String(n.id || uid()), t: +n.t, tag: n.tag || null, text: String(n.text || ''),
+    drawing: typeof n.drawing === 'string' && n.drawing.startsWith('data:image/') ? n.drawing : null, created: n.created || Date.now(),
+  }));
+  const v = data.video || {};
+  if (Array.isArray(data.tags) && data.tags.length) {
+    settings.tags = data.tags.filter(t => t && t.id && t.name).map(t => ({ id: String(t.id), name: String(t.name), key: String(t.key || '').slice(0, 1).toLowerCase(), color: /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : '#94a3b8' }));
+    saveSettings();
+  }
+  if (hasVideo()) {
+    if (v.name && v.name !== state.fileName && !confirm(`This backup is for "${v.name}". Import its notes into "${state.fileName}" anyway?`)) return;
+    if (state.notes.length && !confirm(`Replace the ${state.notes.length} current notes with ${notes.length} notes from the backup?`)) return;
+    state.notes = notes; sortNotes(); saveNotes(); renderEverything();
+    toast(`Imported ${notes.length} notes`);
+  } else if (v.name && Number.isFinite(+v.duration)) {
+    const key = 'notes:' + v.name + '|' + Math.round(+v.duration);
+    store.set(key, { app: 'game-reviewer', video: { name: v.name, duration: +v.duration }, notes });
+    renderEverything();
+    toast(`Imported ${notes.length} notes. Open "${v.name}" to see them.`, '', 5000);
+  } else toast('Open the video first, then import', 'error');
+}
+
+/* ffmpeg helpers */
+function shq(s) { return `'${String(s).replace(/'/g, `'\\''`)}'`; }
+function renderCommands() {
+  const name = state.fileName || 'game.mp4', base = state.baseName || 'game';
+  const ext = (name.match(/\.[^.]+$/) || ['.mp4'])[0];
+  const srt = base + '.srt';
+  const subPath = srt.replace(/\\/g, '\\\\\\\\').replace(/'/g, `\\\\\\'`).replace(/:/g, '\\\\:');
+  $('#cmdTrack').value = `ffmpeg -i ${shq(name)} -i ${shq(srt)} -map 0 -map 1 -c copy -c:s mov_text -metadata:s:s:0 language=eng ${shq(base + '-with-notes' + (ext.toLowerCase() === '.mov' ? '.mov' : '.mp4'))}`;
+  $('#cmdBurn').value = `ffmpeg -i ${shq(name)} -vf "subtitles='${subPath.replace(/"/g, '\\"')}'" -c:a copy ${shq(base + '-burned.mp4')}`;
+  const notes = filteredNotes(), d = dur();
+  $('#clipsLabel').textContent = `Cut each ${state.filterTags.size || state.search.trim() ? 'filtered ' : ''}moment into its own clip (${notes.length})`;
+  $('#cmdClips').value = notes.length ? notes.map((n, i) => {
+    const start = Math.max(0, n.t - settings.clipBefore), end = d ? Math.min(d, n.t + settings.clipAfter) : n.t + settings.clipAfter;
+    const label = slug(tagName(n.tag) || n.text || 'note').slice(0, 30);
+    return `ffmpeg -ss ${fmtStamp(start)} -to ${fmtStamp(end)} -i ${shq(name)} -c copy ${shq(`${base}-clip${String(i + 1).padStart(2, '0')}-${fileStamp(n.t)}-${label}${ext}`)}`;
+  }).join('\n') : '# No notes yet';
+}
+$$('[data-copy]').forEach(b => b.onclick = () => copyText($('#' + b.dataset.copy).value));
+
+/* ---------- Settings ---------- */
+function renderSettings() {
+  $('#setLead').value = settings.leadTime;
+  $('#setBefore').value = settings.clipBefore;
+  $('#setAfter').value = settings.clipAfter;
+  $('#tagEditor').innerHTML = settings.tags.map(t => `
+    <div class="tag-edit" data-tid="${esc(t.id)}">
+      <input type="color" value="${esc(t.color)}" data-f="color" aria-label="Colour">
+      <input type="text" value="${esc(t.name)}" data-f="name" aria-label="Name">
+      <input type="text" class="key" value="${esc(t.key)}" maxlength="1" data-f="key" aria-label="Hotkey">
+      <button class="btn ghost small danger" data-rm title="Remove tag">✕</button>
+    </div>`).join('');
+}
+function keyError(k, id) {
+  if (!k) return null;
+  if (RESERVED.has(k)) return `"${k.toUpperCase()}" is already used by another shortcut`;
+  const other = settings.tags.find(t => t.key === k && t.id !== id);
+  return other ? `"${k.toUpperCase()}" is already used by ${other.name}` : null;
+}
+$('#tagEditor').addEventListener('change', e => {
+  const row = e.target.closest('[data-tid]'); if (!row) return;
+  const t = settings.tags.find(x => x.id === row.dataset.tid); if (!t) return;
+  const f = e.target.dataset.f;
+  if (f === 'key') {
+    const k = e.target.value.trim().toLowerCase();
+    const err = keyError(k, t.id);
+    if (err) { toast(err, 'error'); e.target.value = t.key; return; }
+    t.key = k;
+  } else if (f === 'name') {
+    t.name = e.target.value.trim() || t.name; e.target.value = t.name;
+  } else if (f === 'color') t.color = e.target.value;
+  saveSettings(); renderEverything(false);
+});
+$('#tagEditor').addEventListener('click', e => {
+  if (!e.target.closest('[data-rm]')) return;
+  const id = e.target.closest('[data-tid]').dataset.tid, t = tagById(id);
+  if (!confirm(`Remove the tag "${t.name}"? Notes with this tag will show as untagged.`)) return;
+  settings.tags = settings.tags.filter(x => x.id !== id);
+  state.filterTags.delete(id);
+  saveSettings(); renderEverything();
+});
+$('#addTagBtn').onclick = () => {
+  const free = '90qwertyuiopsfghjkxcvm'.split('').find(k => !keyError(k, null)) || '';
+  settings.tags.push({ id: 't' + uid(), name: 'New tag', key: free, color: '#ec4899' });
+  saveSettings(); renderEverything();
+};
+$('#resetTagsBtn').onclick = () => {
+  if (!confirm('Reset tags to the 8 defaults? Custom tags will be removed.')) return;
+  settings.tags = clone(DEFAULT_TAGS); saveSettings(); renderEverything();
+};
+$('#clearNotesBtn').onclick = () => {
+  if (!hasVideo() || !state.notes.length) { toast('No notes to delete'); return; }
+  if (!confirm(`Delete all ${state.notes.length} notes for ${state.fileName}? This cannot be undone. Download a backup first if unsure.`)) return;
+  state.notes = []; saveNotes(); renderAll();
+};
+[['#setLead', 'leadTime', 0, 30], ['#setBefore', 'clipBefore', 0, 60], ['#setAfter', 'clipAfter', 0.5, 120]].forEach(([sel, k, lo, hi]) => {
+  $(sel).addEventListener('change', e => {
+    settings[k] = clamp(num(e.target.value, settings[k]), lo, hi); e.target.value = settings[k];
+    saveSettings(); renderCommands();
+  });
+});
+
+function applyTheme() { document.documentElement.dataset.theme = settings.theme; }
+$('#themeBtn').onclick = () => { settings.theme = settings.theme === 'dark' ? 'light' : 'dark'; applyTheme(); saveSettings(); };
+
+/* ---------- Tabs and help ---------- */
+$('#tabs').onclick = e => {
+  const b = e.target.closest('[data-tab]'); if (!b) return;
+  $$('#tabs button').forEach(x => x.classList.toggle('active', x === b));
+  $$('[data-panel]').forEach(p => p.hidden = p.dataset.panel !== b.dataset.tab);
+};
+function renderHelp() {
+  const rows = [
+    ['<kbd>Space</kbd>', 'Play / pause'],
+    ['<kbd>←</kbd> <kbd>→</kbd>', 'Back / forward 5s'],
+    ['<kbd>Shift</kbd> + <kbd>←</kbd> <kbd>→</kbd>', 'Back / forward 15s'],
+    ['<kbd>,</kbd> <kbd>.</kbd>', 'Frame back / forward'],
+    ['<kbd>[</kbd> <kbd>]</kbd>', 'Slower / faster'],
+    ['<kbd>N</kbd>', `Write a note (pauses; stamped ${settings.leadTime}s earlier). Enter saves, Esc cancels.`],
+    ...settings.tags.filter(t => t.key).map(t => [`<kbd>${esc(t.key.toUpperCase())}</kbd>`, `Tag: ${esc(t.name)} (Shift = tag + note)`]),
+    ['<kbd>D</kbd>', 'Draw on the frame. In draw mode: <kbd>1</kbd>–<kbd>4</kbd> tools, <kbd>Z</kbd> undo, <kbd>Enter</kbd> save'],
+    ['<kbd>A</kbd> / <kbd>B</kbd> / <kbd>L</kbd>', 'Set loop start / end, toggle loop'],
+    ['<kbd>Esc</kbd>', 'Close / stop playlist / leave draw mode'],
+    ['<kbd>?</kbd>', 'This help'],
+  ];
+  $('#keysTable').innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
+}
+function toggleHelp(show) {
+  const h = $('#help'); const s = show ?? h.hidden;
+  if (s) renderHelp();
+  h.hidden = !s;
+}
+$('#helpBtn').onclick = () => toggleHelp(true);
+$('#help').onclick = e => { if (e.target === $('#help')) toggleHelp(false); };
+
+/* ---------- Keyboard ---------- */
+function isTyping(el) {
+  if (!el || el === document.body) return false;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (tag === 'INPUT') return !['button', 'checkbox', 'radio', 'range', 'color', 'file', 'submit'].includes(el.type);
+  return false;
+}
+const CODE_KEYS = { Space: ' ', Comma: ',', Period: '.', BracketLeft: '[', BracketRight: ']', Slash: '/' };
+function keyId(e) {
+  const c = e.code || '';
+  if (c.startsWith('Digit')) return c.slice(5);
+  if (/^Numpad\d$/.test(c)) return c.slice(6);
+  if (c.startsWith('Key')) return c.slice(3).toLowerCase();
+  if (CODE_KEYS[c]) return CODE_KEYS[c];
+  return (e.key || '').toLowerCase();
+}
+
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (isTyping(e.target)) return;
+  const k = keyId(e);
+
+  if (e.key === 'Escape') {
+    if (!$('#help').hidden) toggleHelp(false);
+    else if (state.draw) exitDraw();
+    else if (state.playlist) stopPlaylist();
+    else if (state.selectedId) { state.selectedId = null; renderList(); renderTimeline(); }
+    e.preventDefault(); return;
+  }
+  if (e.key === '?' || (k === '/' && e.shiftKey)) { toggleHelp(); e.preventDefault(); return; }
+  if (!$('#help').hidden) return;
+  if (!hasVideo()) return;
+
+  if (state.draw) {
+    const tools = { 1: 'arrow', 2: 'circle', 3: 'line', 4: 'free' };
+    if (tools[k]) setTool(tools[k]);
+    else if (k === 'z') { state.draw.shapes.pop(); renderDrawing(); }
+    else if (k === 'd') exitDraw();
+    else if (e.key === 'Enter') saveDrawing();
+    else if (k === ' ') { /* stay paused while drawing */ }
+    else return;
+    e.preventDefault(); return;
+  }
+
+  let handled = true;
+  switch (k) {
+    case ' ': togglePlay(); break;
+    case 'arrowleft': skip(e.shiftKey ? -15 : -5); break;
+    case 'arrowright': skip(e.shiftKey ? 15 : 5); break;
+    case ',': frame(-1); break;
+    case '.': frame(1); break;
+    case '[': speedStep(-1); break;
+    case ']': speedStep(1); break;
+    case 'n': openEntry(); break;
+    case 'd': enterDraw(); break;
+    case 'a': setLoopPoint('a'); break;
+    case 'b': setLoopPoint('b'); break;
+    case 'l': toggleLoop(); break;
+    default: {
+      const tag = settings.tags.find(t => t.key && t.key === k);
+      if (tag) quickTag(tag, e.shiftKey); else handled = false;
+    }
+  }
+  if (handled) e.preventDefault();
+});
+
+// Keep focus off buttons after a mouse click so Space doesn't re-press them.
+document.addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (b && e.detail > 0) b.blur();
+});
+
+/* ---------- Main loop ---------- */
+let lastTimeText = '';
+function tick() {
+  if (hasVideo()) {
+    const ct = video.currentTime, d = dur();
+    $('#playhead').style.left = (ct / d * 100) + '%';
+    const tt = `${fmtTenth(ct)} / ${fmt(d)}`;
+    if (tt !== lastTimeText) { $('#timeLabel').textContent = tt; lastTimeText = tt; }
+
+    if (state.playlist && !video.seeking) {
+      const c = state.playlist.clips[state.playlist.i];
+      if (c && ct >= c.end - 0.02 && !video.paused) gotoClip(state.playlist.i + 1);
+    } else if (state.loopOn && !video.seeking && ct >= state.loopB) {
+      video.currentTime = state.loopA;
+    }
+
+    updateDrawShow(ct);
+
+    let active = null;
+    for (const n of state.notes) { if (n.t <= ct + 0.05) active = n.id; else break; }
+    if (active !== state.activeId) {
+      state.activeId = active;
+      $$('#noteList .note').forEach(el => el.classList.toggle('active', el.dataset.id === active));
+      if (!video.paused && active) { const el = $(`#noteList .note[data-id="${active}"]`); el && el.scrollIntoView({ block: 'nearest' }); }
+    }
+
+    const now = performance.now();
+    if (now - state.lastPosSave > 5000) { state.lastPosSave = now; store.set('pos:' + state.key, ct); }
+  }
+  requestAnimationFrame(tick);
+}
+
+function renderEverything(withSettings = true) {
+  if (withSettings) renderSettings();
+  renderAll(); renderHelp();
+  if (state.entry) renderTagSelect($('#entryTag'), $('#entryTag').value);
+}
+
+window.addEventListener('beforeunload', () => { if (state.key) store.set('pos:' + state.key, video.currentTime); });
+
+applyTheme(); renderSpeed(); updatePlayBtn(); renderEverything();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
