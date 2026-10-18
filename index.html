@@ -180,7 +180,11 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .note:hover { border-color: var(--border); }
 .note.active { box-shadow: inset 3px 0 0 var(--accent); }
 .note.sel { border-color: var(--accent); }
-.note .time { font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; border: 0; background: transparent; padding: 2px 4px; cursor: pointer; color: var(--accent); }
+.note .tedit { grid-column: 1 / -1; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; padding-top: 4px; border-top: 1px dashed var(--border); }
+.note .tedit .btn { padding: 2px 7px; }
+.note .tedit .cur { font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent); min-width: 58px; text-align: center; }
+.entry .tbtn2 { padding: 4px 6px; font-size: 12px; }
+.note .time { 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; border: 0; background: transparent; padding: 2px 4px; cursor: pointer; color: var(--accent); }
 .chip {
   appearance: none; -webkit-appearance: none; border: 0; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 600;
   max-width: 130px; cursor: pointer; text-overflow: ellipsis;
@@ -325,7 +329,9 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
         </div>
       </div>
       <div id="entry" class="entry" hidden>
-        <span class="entry-time" id="entryTime">0:00</span>
+        <button class="btn tbtn2" id="entryEarlier" title="1 second earlier">−1s</button>
+        <span class="entry-time" id="entryTime" title="Time the note will be saved at">0:00</span>
+        <button class="btn tbtn2" id="entryLater" title="1 second later">+1s</button>
         <select id="entryTag" aria-label="Tag"></select>
         <input type="text" id="entryText" placeholder="What happened? Enter saves · Esc cancels" autocomplete="off">
         <button class="btn primary" id="entrySave">Save</button>
@@ -483,7 +489,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 
     <div class="panel" data-panel="settings" hidden>
       <h3>Timing</h3>
-      <label class="field"><span>Lead time: seconds subtracted from a note's time, since you notice a play after it happens</span><input type="number" id="setLead" min="0" max="30" step="0.5"></label>
+      <label class="field"><span>Lead time: seconds subtracted from a note's time while the video is playing, since you notice a play after it happens (not used when paused)</span><input type="number" id="setLead" min="0" max="30" step="0.5"></label>
       <label class="field"><span>Playlist clip: seconds before the note</span><input type="number" id="setBefore" min="0" max="60" step="0.5"></label>
       <label class="field"><span>Playlist clip: seconds after the note</span><input type="number" id="setAfter" min="0.5" max="120" step="0.5"></label>
       <h3>Drawings</h3>
@@ -864,17 +870,19 @@ $('#loopBBtn').onclick = () => setLoopPoint('b');
 $('#loopBtn').onclick = toggleLoop;
 
 /* ---------- Fast note entry ---------- */
-function stampNow() { return clamp(video.currentTime - settings.leadTime, 0, dur()); }
+// While playing you react after the play, so stamp a bit earlier. When paused you're
+// already on the frame you mean, so use it as is.
+function stampNow() { return clamp(video.currentTime - (video.paused ? 0 : settings.leadTime), 0, dur()); }
 
 function openEntry({ tag = null, noteId = null } = {}) {
   if (!hasVideo()) return;
   if (state.draw) return;
   const wasPlaying = state.entry ? state.entry.wasPlaying : !video.paused;
-  video.pause();
   const existing = noteId ? state.notes.find(n => n.id === noteId) : null;
-  const t = existing ? existing.t : stampNow();
+  const t = existing ? existing.t : stampNow();   // before pausing, so lead time applies
+  video.pause();
   state.entry = { t, noteId, wasPlaying };
-  $('#entryTime').textContent = fmt(t);
+  $('#entryTime').textContent = fmtTenth(t);
   renderTagSelect($('#entryTag'), existing ? existing.tag : tag);
   $('#entryText').value = existing ? existing.text : '';
   $('#entry').hidden = false;
@@ -884,7 +892,7 @@ function saveEntry() {
   const e = state.entry; if (!e) return;
   const text = $('#entryText').value.trim();
   const tag = $('#entryTag').value || null;
-  if (e.noteId) updateNote(e.noteId, { text, tag });
+  if (e.noteId) updateNote(e.noteId, { text, tag, t: e.t });
   else if (text || tag) { addNote({ t: e.t, tag, text }); }
   closeEntry(true);
 }
@@ -900,6 +908,12 @@ $('#entry').addEventListener('keydown', ev => {
   else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); closeEntry(true); }
 });
 $('#entrySave').onclick = saveEntry;
+[['#entryEarlier', -1], ['#entryLater', 1]].forEach(([sel, d]) => $(sel).addEventListener('click', () => {
+  if (!state.entry) return;
+  state.entry.t = clamp(state.entry.t + d, 0, dur());
+  $('#entryTime').textContent = fmtTenth(state.entry.t);
+  $('#entryText').focus();
+}));
 $('#noteBtn').onclick = () => openEntry();
 
 function quickTag(tag, withNote) {
@@ -1390,6 +1404,15 @@ function renderList() {
         <button class="btn ghost small" data-clip title="Add to highlight reel">✂</button>
         <button class="btn ghost small danger" data-del title="Delete">✕</button>
       </div>
+      ${n.id === state.selectedId ? `<div class="tedit">
+        <span class="hint">Time</span>
+        <button class="btn small" data-tadj="-1" title="1 second earlier">−1s</button>
+        <button class="btn small" data-tadj="-0.1" title="0.1 second earlier">−0.1</button>
+        <span class="cur">${fmtTenth(n.t)}</span>
+        <button class="btn small" data-tadj="0.1" title="0.1 second later">+0.1</button>
+        <button class="btn small" data-tadj="1" title="1 second later">+1s</button>
+        <button class="btn small" data-tnow title="Set this note's time to where the video is now">Move to video time</button>
+      </div>` : ''}
     </li>`;
   }).join('');
 }
@@ -1398,6 +1421,10 @@ $('#noteList').addEventListener('click', e => {
   const li = e.target.closest('.note'); if (!li) return;
   const id = li.dataset.id, n = state.notes.find(x => x.id === id); if (!n) return;
   if (e.target.closest('[data-del]')) { deleteNote(id); return; }
+  const adj = e.target.closest('[data-tadj]');
+  if (adj) { setNoteTime(n, n.t + parseFloat(adj.dataset.tadj)); return; }
+  if (e.target.closest('[data-tnow]')) { setNoteTime(n, video.currentTime, false); return; }
+  if (e.target.closest('.tedit')) return;
   if (e.target.closest('[data-png]')) { exportNotePNG(n); return; }
   if (e.target.closest('[data-clip]')) { addClipsFromNotes([n]); return; }
   if (e.target.closest('select')) return;
@@ -1413,10 +1440,21 @@ $('#noteList').addEventListener('change', e => {
 
 function selectNote(n, doSeek) {
   stopPlaylist(true);
+  const changed = state.selectedId !== n.id;
   state.selectedId = n.id;
   if (doSeek) { video.pause(); seek(n.t); }
-  $$('#noteList .note').forEach(el => el.classList.toggle('sel', el.dataset.id === n.id));
+  if (changed) renderList(); else $$('#noteList .note').forEach(el => el.classList.toggle('sel', el.dataset.id === n.id));
   renderTimeline();
+}
+// Moves a note (and any drawing positions with it) to a new time.
+function setNoteTime(n, t, follow = true) {
+  t = clamp(t, 0, dur());
+  const delta = t - n.t; if (Math.abs(delta) < 0.001) return;
+  const patch = { t };
+  if (n.vec) { const vec = clone(n.vec); vec.keys.forEach(k => { k.t = clamp(k.t + delta, 0, dur()); }); patch.vec = vec; }
+  updateNote(n.id, patch);
+  if (follow) { video.pause(); seek(t); }
+  const li = $(`#noteList .note[data-id="${n.id}"]`); li && li.scrollIntoView({ block: 'nearest' });
 }
 function editText(li, n) {
   const el = li.querySelector('.text');

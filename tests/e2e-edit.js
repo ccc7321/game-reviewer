@@ -38,8 +38,8 @@ const probeDur = f => parseFloat(execSync(`ffprobe -v error -show_entries format
   await seekTo(13); await kb.press('n'); await kb.type('Before first timeout'); await kb.press('Enter'); await page.evaluate(() => video.pause());
   await seekTo(40); await kb.press('n'); await kb.type('Between timeouts'); await kb.press('Enter'); await page.evaluate(() => video.pause());
   await seekTo(26); await kb.press('n'); await kb.type('Inside dead time'); await kb.press('Enter'); await page.evaluate(() => video.pause());
-  await seekTo(93); await kb.press('1'); // made shot at 90
-  await seekTo(73); await kb.press('2'); // missed shot at 70
+  await seekTo(90); await kb.press('1'); // made shot at 90 (paused: exact time)
+  await seekTo(70); await kb.press('2'); // missed shot at 70
 
   // Clips: one via C, two from notes
   await seekTo(100); await kb.press('c'); await seekTo(106); await kb.press('c');
@@ -121,8 +121,8 @@ const probeDur = f => parseFloat(execSync(`ffprobe -v error -show_entries format
       const srt = execSync(`ffmpeg -v error -i '${outFile}' -map 0:s -f srt -`).toString();
       fs.writeFileSync(path.join(OUT, name + '.srt'), srt);
       if (name === 'condensed-soft') {
-        // note at 37s source -> 27s output (10s cut before it); "Inside dead time" must be gone
-        ok('Soft subs retimed past cuts', /00:00:27,\d{3} --> .*\nBetween timeouts/.test(srt) && !srt.includes('Inside dead time'), '');
+        // note at 40s source -> 30s output (10s cut before it); "Inside dead time" must be gone
+        ok('Soft subs retimed past cuts', /00:00:30,\d{3} --> .*\nBetween timeouts/.test(srt) && !srt.includes('Inside dead time'), '');
       } else ok('Reel soft subs: caption on first clip at 0s', /^1\n00:00:00,000 --> 00:00:07,000\nPull-up from the elbow/.test(srt));
     }
     if (name === 'condensed-burn') execSync(`ffmpeg -v error -y -ss 28 -i '${outFile}' -frames:v 1 '${OUT}/condensed-burn-28s.png'`);

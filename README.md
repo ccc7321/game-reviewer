@@ -22,7 +22,7 @@ A single-file browser app for reviewing your own basketball games. Log timestamp
 | X | Dead time start / end (timeouts, free throws, breaks) |
 | C | Highlight clip start / end |
 
-Notes are stamped 3 seconds early by default (change "lead time" in Settings), since you usually react after the play.
+While the video is playing, notes are stamped 3 seconds early (change "lead time" in Settings), since you usually react after the play. When paused, notes use the exact frame. To fix a note's time later, click it: use −1s / −0.1 / +0.1 / +1s, or "Move to video time" to put it where the video is now.
 
 ## Journal and saving to a folder
 
@@ -71,7 +71,7 @@ Cuts are frame-accurate, because each part is re-encoded. A full game takes a fe
 ```sh
 cd tests
 ffmpeg -f lavfi -i testsrc=duration=120:size=1280x720:rate=30 -pix_fmt yuv420p -c:v libvpx-vp9 -b:v 300k test.webm
-npm i -g playwright && node e2e.js && node e2e-edit.js && node e2e-track.js && node e2e-journal.js
+npm i -g playwright && node e2e.js && node e2e-edit.js && node e2e-track.js && node e2e-journal.js && node e2e-time.js
 ```
 
 The tests use WebM because headless Chromium can't decode H.264; real Chrome and Safari play MP4 fine.
