@@ -125,21 +125,21 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const dn = (await notes()).find(n => n.drawing);
   ok('Drawing saved to a note', !!dn && dn.text === 'Should have cut here' && Math.abs(dn.t - 60) < 0.1, dn ? `(${Math.round(dn.drawing.length/1024)} KB)` : '');
   await page.evaluate(() => seek(10)); await sleep(300);
-  ok('Drawing hidden away from its time', await page.evaluate(() => document.querySelector('#drawShow').hidden));
+  ok('Drawing hidden away from its time', await page.evaluate(() => (document.querySelector('#drawShow').hidden && document.querySelector('#drawShowCanvas').hidden)));
   // Default: playback pauses on the drawing's frame, Space continues and hides it
   await page.evaluate(() => seek(58.5)); await sleep(100); await page.evaluate(() => video.play()); await sleep(2500);
-  const st = await page.evaluate(() => ({ paused: video.paused, t: video.currentTime, shown: !document.querySelector('#drawShow').hidden }));
+  const st = await page.evaluate(() => ({ paused: video.paused, t: video.currentTime, shown: !(document.querySelector('#drawShow').hidden && document.querySelector('#drawShowCanvas').hidden) }));
   ok('Playback pauses on the drawing and shows it', st.paused && Math.abs(st.t - 60) < 0.05 && st.shown, JSON.stringify(st));
   await page.screenshot({ path: path.join(OUT, 'drawshow.png') });
   await kb.press('Space'); await sleep(1200);
-  const st2 = await page.evaluate(() => ({ paused: video.paused, t: video.currentTime, shown: !document.querySelector('#drawShow').hidden }));
+  const st2 = await page.evaluate(() => ({ paused: video.paused, t: video.currentTime, shown: !(document.querySelector('#drawShow').hidden && document.querySelector('#drawShowCanvas').hidden) }));
   ok('Space continues and the drawing disappears', !st2.paused && st2.t > 60.5 && !st2.shown, JSON.stringify(st2));
   // Timed mode: keeps playing, shows for the set seconds
   await page.evaluate(() => { video.pause(); settings.drawMode = 'timed'; settings.drawHold = 1.5; });
   await page.evaluate(() => seek(59.5)); await sleep(100); await page.evaluate(() => video.play()); await sleep(900);
-  ok('Timed mode shows drawing while playing', await page.evaluate(() => !video.paused && !document.querySelector('#drawShow').hidden), `(t=${(await ct()).toFixed(2)})`);
+  ok('Timed mode shows drawing while playing', await page.evaluate(() => !video.paused && !(document.querySelector('#drawShow').hidden && document.querySelector('#drawShowCanvas').hidden)), `(t=${(await ct()).toFixed(2)})`);
   await sleep(1800);
-  ok('Timed mode hides after the set seconds', await page.evaluate(() => document.querySelector('#drawShow').hidden), `(t=${(await ct()).toFixed(2)})`);
+  ok('Timed mode hides after the set seconds', await page.evaluate(() => (document.querySelector('#drawShow').hidden && document.querySelector('#drawShowCanvas').hidden)), `(t=${(await ct()).toFixed(2)})`);
   await page.evaluate(() => { video.pause(); settings.drawMode = 'pause'; });
   await page.click('[data-tab=notes]');
   const png = await dl(() => page.click(`.note[data-id="${dn.id}"] [data-png]`));

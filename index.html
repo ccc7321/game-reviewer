@@ -117,7 +117,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
   background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
   padding: 8px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; max-width: calc(100% - 16px);
 }
-.drawbar { top: 8px; }
+.drawbar { top: 8px; width: max-content; max-width: min(720px, calc(100% - 16px)); }
 .drawbar .sw { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
 .drawbar .sw.on { border-color: var(--text); box-shadow: 0 0 0 2px var(--panel); }
 .drawbar input[type=text] { width: 180px; }
@@ -239,7 +239,8 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
   border-radius: 8px; padding: 6px 8px; max-width: 280px; font-size: 12px; transform: translate(-50%, calc(-100% - 10px));
 }
 .tooltip b { color: var(--accent); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-#toasts { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 70; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; }
+#toasts { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 70; width: max-content; max-width: calc(100% - 16px); display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; }
+.stage:has(#entry:not([hidden])) #toasts { bottom: 72px; }
 .toast {
   pointer-events: auto; background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent); box-shadow: var(--shadow);
   border-radius: 8px; padding: 8px 12px; display: flex; gap: 10px; align-items: center; animation: tin .15s ease-out;
@@ -276,6 +277,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
     <div class="stage" id="stage">
       <video id="video" playsinline preload="auto"></video>
       <img id="drawShow" class="overlay" alt="" hidden>
+      <canvas id="drawShowCanvas" class="overlay" hidden></canvas>
       <canvas id="drawCanvas" class="overlay" hidden></canvas>
       <div id="empty" class="empty">
         <h2>Drop a game video here</h2>
@@ -289,6 +291,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
           <button data-tool="circle" title="Circle (2)">◯ Circle</button>
           <button data-tool="line" title="Line (3)">／ Line</button>
           <button data-tool="free" title="Freehand (4)">✎ Free</button>
+          <button data-tool="move" title="Adjust: drag a drawing or its ends to a new spot on this frame (5)">✥ Adjust</button>
         </div>
         <div class="row" id="swatches"></div>
         <button class="btn small" id="undoBtn" title="Undo (Z)">Undo</button>
@@ -298,6 +301,14 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
         <button class="btn small primary" id="drawSave" title="Save drawing as a note (Enter)">Save</button>
         <button class="btn small" id="drawPng" title="Download this frame + drawing as PNG">PNG</button>
         <button class="btn small" id="drawClose" title="Close (Esc or D)">Close</button>
+        <div class="row" id="keyRow" style="flex-basis:100%" hidden>
+          <span class="hint" id="keyInfo"></span>
+          <button class="btn small" id="keyPrev" title="Previous position ([)">‹ Prev</button>
+          <button class="btn small" id="keyNext" title="Next position (])">Next ›</button>
+          <button class="btn small" id="keyHold" title="Keep the drawing on screen until this frame (K)">Keep until here</button>
+          <button class="btn small danger" id="keyDel" title="Remove the position on this frame">Remove position</button>
+          <span class="hint">Step with <kbd>,</kbd> <kbd>.</kbd> or <kbd>←</kbd> <kbd>→</kbd>, then drag with ✥ Adjust.</span>
+        </div>
       </div>
       <div id="entry" class="entry" hidden>
         <span class="entry-time" id="entryTime">0:00</span>
@@ -305,6 +316,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
         <input type="text" id="entryText" placeholder="What happened? Enter saves · Esc cancels" autocomplete="off">
         <button class="btn primary" id="entrySave">Save</button>
       </div>
+      <div id="toasts"></div>
       <div id="playlistBar" class="playlist-bar" hidden>
         <span id="playlistLabel"></span>
         <button class="btn small" id="plPrev">‹ Prev</button>
@@ -501,7 +513,6 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
   </div>
 </div>
 <div id="tooltip" class="tooltip" hidden></div>
-<div id="toasts"></div>
 
 <script>
 'use strict';
@@ -716,7 +727,7 @@ function saveNotes() {
   store.set(state.key, { app: 'game-reviewer', video: { name: state.fileName, duration: dur() }, notes: state.notes, cuts: state.cuts, clips: state.clips });
 }
 function addNote(n) {
-  const note = { id: uid(), t: clamp(n.t, 0, dur()), tag: n.tag || null, text: n.text || '', drawing: n.drawing || null, created: Date.now() };
+  const note = { id: uid(), t: clamp(n.t, 0, dur()), tag: n.tag || null, text: n.text || '', drawing: n.drawing || null, vec: n.vec || null, created: Date.now() };
   state.notes.push(note); sortNotes(); saveNotes(); renderAll();
   return note;
 }
@@ -911,7 +922,7 @@ function contentRect() {
 }
 function layoutOverlays() {
   const r = contentRect();
-  [$('#drawCanvas'), $('#drawShow')].forEach(el => {
+  [$('#drawCanvas'), $('#drawShow'), $('#drawShowCanvas')].forEach(el => {
     el.style.left = r.left + 'px'; el.style.top = r.top + 'px';
     el.style.width = r.width + 'px'; el.style.height = r.height + 'px';
   });
@@ -919,49 +930,136 @@ function layoutOverlays() {
 new ResizeObserver(layoutOverlays).observe(stage);
 
 /* ---------- Drawing ---------- */
+// A drawing is a set of vector shapes plus keyframes. Each keyframe stores every
+// shape's points at one moment; between keyframes the points glide in a straight
+// line, so an arrow can follow a player. One keyframe = a still drawing.
 const canvas = $('#drawCanvas'), cx = canvas.getContext('2d');
+const showCanvas = $('#drawShowCanvas'), sx = showCanvas.getContext('2d');
+const KEY_EPS = 0.6 / FPS;   // this close to a keyframe counts as being on it
 function drawSize() {
   const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
   const w = Math.min(vw, MAX_DRAW_W);
   return { w, h: Math.round(vh * w / vw) };
 }
+function vecPts(vec, t) {
+  const k = vec.keys; if (!k.length) return [];
+  if (t <= k[0].t) return k[0].pts;
+  const last = k[k.length - 1]; if (t >= last.t) return last.pts;
+  let i = 0; while (k[i + 1].t < t) i++;
+  const a = k[i], b = k[i + 1], f = (t - a.t) / (b.t - a.t);
+  return a.pts.map((ps, si) => ps.map((p, pi) => {
+    const q = (b.pts[si] && b.pts[si][pi]) || p;
+    return [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f];
+  }));
+}
+function vecShapes(vec, t) { const pts = vecPts(vec, t); return vec.shapes.map((s, i) => ({ ...s, pts: pts[i] || [] })); }
+function vecRange(vec) { const k = vec.keys; return k.length ? [k[0].t, k[k.length - 1].t] : [0, 0]; }
+function keyIndexAt(vec, t) { return vec.keys.findIndex(k => Math.abs(k.t - t) < KEY_EPS); }
+function ensureKey(vec, t) {
+  const i = keyIndexAt(vec, t); if (i >= 0) return vec.keys[i];
+  const key = { t, pts: clone(vecPts(vec, t)) };
+  vec.keys.push(key); vec.keys.sort((a, b) => a.t - b.t);
+  return key;
+}
+function addShape(vec, shape, pts, t) {
+  if (!vec.keys.length) vec.keys.push({ t, pts: [] });
+  vec.shapes.push(shape);
+  vec.keys.forEach(k => k.pts.push(clone(pts)));
+}
+function validVec(v) {
+  return v && Array.isArray(v.shapes) && Array.isArray(v.keys) && v.keys.length && v.keys.every(k => Number.isFinite(+k.t) && Array.isArray(k.pts)) ? v : null;
+}
+
 function enterDraw() {
   if (!hasVideo() || state.draw) return;
   closeEntry(false); stopPlaylist(true);
   video.pause();
+  const t = video.currentTime;
+  const near = (n, pad) => { if (!n.vec) return false; const [a, b] = vecRange(n.vec); return t >= a - pad && t <= b + pad; };
+  const note = state.notes.find(n => n.id === state.selectedId && near(n, 0.5)) || state.notes.find(n => near(n, 0.1));
   const { w, h } = drawSize();
-  canvas.width = w; canvas.height = h;
-  state.draw = { shapes: [], tool: state.lastTool || 'arrow', color: state.lastColor || COLORS[0], cur: null, t: video.currentTime };
+  const vec = note ? clone(note.vec) : { w, h, shapes: [], keys: [] };
+  canvas.width = vec.w || w; canvas.height = vec.h || h;
+  state.draw = {
+    vec, noteId: note ? note.id : null, tool: note ? 'move' : (state.lastTool || 'arrow'),
+    color: state.lastColor || COLORS[0], cur: null, drag: null, history: [], dirty: false, lastT: null,
+  };
+  if (note) state.selectedId = note.id;
   layoutOverlays();
-  canvas.hidden = false; $('#drawBar').hidden = false; $('#drawShow').hidden = true;
-  $('#drawText').value = '';
+  canvas.hidden = false; $('#drawBar').hidden = false; $('#drawShow').hidden = true; showCanvas.hidden = true;
+  state.shownDrawing = null;
+  $('#drawText').value = note ? note.text : '';
   renderDrawBar(); renderDrawing();
   $('#drawBtn').classList.add('on');
+  if (note) toast('Editing drawing. Step forward (. or →), then drag it to follow the play.', '', 3500);
 }
 function exitDraw(force) {
   if (!state.draw) return;
-  if (!force && state.draw.shapes.length && !confirm('Discard this drawing?')) return;
+  if (!force && state.draw.dirty && !confirm('Discard changes to this drawing?')) return;
   state.draw = null;
   canvas.hidden = true; $('#drawBar').hidden = true;
   $('#drawText').blur();
   $('#drawBtn').classList.remove('on');
+  state.shownDrawing = null;
 }
 function renderDrawBar() {
   const d = state.draw; if (!d) return;
   $$('#toolSeg button').forEach(b => b.classList.toggle('on', b.dataset.tool === d.tool));
   $('#swatches').innerHTML = COLORS.map(c => `<button class="sw ${c === d.color ? 'on' : ''}" data-color="${c}" style="background:${c}" title="Colour"></button>`).join('');
+  canvas.style.cursor = d.tool === 'move' ? 'default' : 'crosshair';
+  renderKeyInfo();
 }
-function setTool(t) { if (!state.draw) return; state.draw.tool = state.lastTool = t; renderDrawBar(); }
+function renderKeyInfo() {
+  const d = state.draw; if (!d) return;
+  const vec = d.vec, has = vec.shapes.length > 0;
+  $('#keyRow').hidden = !has;
+  if (!has) return;
+  const t = video.currentTime, ki = keyIndexAt(vec, t), [a, b] = vecRange(vec);
+  const txt = vec.keys.length === 1
+    ? `Shown at ${fmtTenth(a)} only`
+    : `Shown ${fmtTenth(a)}–${fmtTenth(b)} · ${vec.keys.length} positions`;
+  $('#keyInfo').textContent = txt + (ki >= 0 ? ` · on position ${ki + 1}` : '');
+  $('#keyDel').disabled = ki < 0 || vec.keys.length < 2;
+  $('#keyPrev').disabled = !vec.keys.some(k => k.t < t - KEY_EPS);
+  $('#keyNext').disabled = !vec.keys.some(k => k.t > t + KEY_EPS);
+}
+function pushHistory(d) { d.history.push(JSON.stringify(d.vec)); if (d.history.length > 100) d.history.shift(); d.dirty = true; }
+function undoDraw() { const d = state.draw; if (!d || !d.history.length) return; d.vec = JSON.parse(d.history.pop()); renderDrawing(); }
+function setTool(t) { if (!state.draw) return; state.draw.tool = t; if (t !== 'move') state.lastTool = t; renderDrawBar(); renderDrawing(); }
+function keepHere() {
+  const d = state.draw; if (!d || !d.vec.shapes.length) return;
+  if (keyIndexAt(d.vec, video.currentTime) >= 0) { toast('Already a position here', '', 1200); return; }
+  pushHistory(d); ensureKey(d.vec, video.currentTime); renderDrawing();
+  toast('Drawing now stays until here', '', 1400);
+}
+function jumpKey(dir) {
+  const d = state.draw; if (!d) return;
+  const t = video.currentTime;
+  const k = dir < 0 ? d.vec.keys.filter(k => k.t < t - KEY_EPS).pop() : d.vec.keys.find(k => k.t > t + KEY_EPS);
+  if (k) { video.pause(); seek(k.t); }
+}
 $('#toolSeg').onclick = e => { const b = e.target.closest('[data-tool]'); if (b) setTool(b.dataset.tool); };
 $('#swatches').onclick = e => {
   const b = e.target.closest('[data-color]'); if (!b || !state.draw) return;
   state.draw.color = state.lastColor = b.dataset.color; renderDrawBar();
 };
-$('#undoBtn').onclick = () => { if (state.draw) { state.draw.shapes.pop(); renderDrawing(); } };
-$('#clearBtn').onclick = () => { if (state.draw) { state.draw.shapes = []; renderDrawing(); } };
+$('#undoBtn').onclick = undoDraw;
+$('#clearBtn').onclick = () => { const d = state.draw; if (d && d.vec.shapes.length) { pushHistory(d); d.vec.shapes = []; d.vec.keys = []; renderDrawing(); } };
+$('#keyPrev').onclick = () => jumpKey(-1);
+$('#keyNext').onclick = () => jumpKey(1);
+$('#keyHold').onclick = keepHere;
+$('#keyDel').onclick = () => {
+  const d = state.draw; if (!d) return;
+  const i = keyIndexAt(d.vec, video.currentTime);
+  if (i < 0 || d.vec.keys.length < 2) return;
+  pushHistory(d); d.vec.keys.splice(i, 1); renderDrawing();
+};
 $('#drawClose').onclick = () => exitDraw();
 $('#drawSave').onclick = saveDrawing;
-$('#drawPng').onclick = () => exportPNG(canvas);
+$('#drawPng').onclick = () => {
+  const d = state.draw; if (!d) return;
+  d.noHandles = true; renderDrawing(); exportPNG(canvas); d.noHandles = false; renderDrawing();
+};
 $('#drawText').addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); saveDrawing(); }
   else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); e.target.blur(); }
@@ -972,29 +1070,82 @@ function canvasPoint(e) {
   const r = canvas.getBoundingClientRect();
   return [(e.clientX - r.left) * canvas.width / r.width, (e.clientY - r.top) * canvas.height / r.height];
 }
+function segDist(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+  const f = l2 ? clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2, 0, 1) : 0;
+  return Math.hypot(p[0] - a[0] - f * dx, p[1] - a[1] - f * dy);
+}
+// Returns {si, pi} for an end handle, {si, pi: null} for the shape body, or null.
+function hitTest(vec, t, p) {
+  const r = canvas.getBoundingClientRect();
+  const tol = 14 * canvas.width / (r.width || canvas.width);
+  const shapes = vecShapes(vec, t);
+  for (let si = shapes.length - 1; si >= 0; si--) {
+    const s = shapes[si], pts = s.pts; if (!pts.length) continue;
+    if (s.type !== 'free') {
+      const last = pts.length - 1;
+      if (Math.hypot(p[0] - pts[last][0], p[1] - pts[last][1]) < tol) return { si, pi: last };
+      if (Math.hypot(p[0] - pts[0][0], p[1] - pts[0][1]) < tol) return { si, pi: 0 };
+    }
+    if (s.type === 'arrow' || s.type === 'line') { if (segDist(p, pts[0], pts[pts.length - 1]) < tol) return { si, pi: null }; }
+    else if (s.type === 'circle') {
+      const [a, b] = [pts[0], pts[pts.length - 1]];
+      if (p[0] >= Math.min(a[0], b[0]) - tol && p[0] <= Math.max(a[0], b[0]) + tol && p[1] >= Math.min(a[1], b[1]) - tol && p[1] <= Math.max(a[1], b[1]) + tol) return { si, pi: null };
+    } else if (pts.some((q, i) => i && segDist(p, pts[i - 1], q) < tol)) return { si, pi: null };
+  }
+  return null;
+}
 canvas.addEventListener('pointerdown', e => {
   const d = state.draw; if (!d) return;
+  video.pause();
+  const p = canvasPoint(e), t = video.currentTime;
+  if (d.tool === 'move') {
+    const hit = hitTest(d.vec, t, p);
+    if (!hit) return;
+    pushHistory(d);
+    const key = ensureKey(d.vec, t);
+    d.drag = { ...hit, key, last: p };
+  } else {
+    d.cur = { type: d.tool, color: d.color, w: Math.max(3, canvas.width / 220), pts: [p, p] };
+  }
   canvas.setPointerCapture(e.pointerId);
-  const p = canvasPoint(e);
-  d.cur = { type: d.tool, color: d.color, w: Math.max(3, canvas.width / 220), pts: [p, p] };
   renderDrawing();
 });
 canvas.addEventListener('pointermove', e => {
-  const d = state.draw; if (!d || !d.cur) return;
+  const d = state.draw; if (!d) return;
   const p = canvasPoint(e);
-  if (d.cur.type === 'free') d.cur.pts.push(p); else d.cur.pts[1] = p;
-  renderDrawing();
+  if (d.drag) {
+    const pts = d.drag.key.pts[d.drag.si];
+    const dx = p[0] - d.drag.last[0], dy = p[1] - d.drag.last[1];
+    if (d.drag.pi == null) pts.forEach(q => { q[0] += dx; q[1] += dy; });
+    else { pts[d.drag.pi][0] += dx; pts[d.drag.pi][1] += dy; }
+    d.drag.last = p; renderDrawing(); return;
+  }
+  if (d.cur) {
+    if (d.cur.type === 'free') d.cur.pts.push(p); else d.cur.pts[1] = p;
+    renderDrawing(); return;
+  }
+  if (d.tool === 'move') {
+    const hit = hitTest(d.vec, video.currentTime, p);
+    canvas.style.cursor = hit ? (hit.pi == null ? 'move' : 'pointer') : 'default';
+  }
 });
 const endStroke = () => {
-  const d = state.draw; if (!d || !d.cur) return;
+  const d = state.draw; if (!d) return;
+  if (d.drag) { d.drag = null; renderDrawing(); return; }
+  if (!d.cur) return;
   const [a, b] = [d.cur.pts[0], d.cur.pts[d.cur.pts.length - 1]];
-  if (d.cur.type === 'free' ? d.cur.pts.length > 2 : Math.hypot(b[0] - a[0], b[1] - a[1]) > 4) d.shapes.push(d.cur);
+  if (d.cur.type === 'free' ? d.cur.pts.length > 2 : Math.hypot(b[0] - a[0], b[1] - a[1]) > 4) {
+    pushHistory(d);
+    addShape(d.vec, { type: d.cur.type, color: d.cur.color, w: d.cur.w }, d.cur.pts, video.currentTime);
+  }
   d.cur = null; renderDrawing();
 };
 canvas.addEventListener('pointerup', endStroke);
 canvas.addEventListener('pointercancel', endStroke);
 
 function drawShape(ctx, s) {
+  if (!s.pts || !s.pts.length) return;
   ctx.save();
   ctx.strokeStyle = ctx.fillStyle = s.color; ctx.lineWidth = s.w; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.shadowColor = 'rgba(0,0,0,.65)'; ctx.shadowBlur = s.w * 1.2;
@@ -1020,41 +1171,69 @@ function drawShape(ctx, s) {
   }
   ctx.restore();
 }
+function drawHandle(ctx, p, r) {
+  ctx.save(); ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff'; ctx.strokeStyle = '#111'; ctx.lineWidth = r / 2.5; ctx.fill(); ctx.stroke(); ctx.restore();
+}
 function renderDrawing() {
   cx.clearRect(0, 0, canvas.width, canvas.height);
   const d = state.draw; if (!d) return;
-  d.shapes.forEach(s => drawShape(cx, s));
+  const t = video.currentTime;
+  const shapes = vecShapes(d.vec, t);
+  shapes.forEach(s => drawShape(cx, s));
   if (d.cur) drawShape(cx, d.cur);
+  if (d.tool === 'move' && !d.noHandles) {
+    const r = Math.max(5, canvas.width / 170);
+    shapes.forEach(s => { if (s.type !== 'free' && s.pts.length) { drawHandle(cx, s.pts[0], r); drawHandle(cx, s.pts[s.pts.length - 1], r); } });
+  }
+  d.lastT = t;
+  renderKeyInfo();
+}
+function rasterize(vec, t) {
+  const off = document.createElement('canvas'); off.width = vec.w; off.height = vec.h;
+  const o = off.getContext('2d');
+  vecShapes(vec, t).forEach(s => drawShape(o, s));
+  // WebP is much smaller; fall back to PNG where the browser can't encode it.
+  let url = off.toDataURL('image/webp', 0.85);
+  if (!url.startsWith('data:image/webp')) url = off.toDataURL('image/png');
+  return url;
 }
 function saveDrawing() {
   const d = state.draw; if (!d) return;
-  if (!d.shapes.length) { toast('Draw something first'); return; }
-  // WebP is much smaller; fall back to PNG where the browser can't encode it.
-  let dataUrl = canvas.toDataURL('image/webp', 0.85);
-  if (!dataUrl.startsWith('data:image/webp')) dataUrl = canvas.toDataURL('image/png');
+  const vec = d.vec;
+  if (!vec.shapes.length) { toast('Draw something first'); return; }
+  vec.w = canvas.width; vec.h = canvas.height;
+  const [t0, t1] = vecRange(vec);
+  const drawing = rasterize(vec, t0);   // still image of the first position, for PNG export
   const text = $('#drawText').value.trim();
-  const t = video.currentTime;
-  const sel = state.notes.find(n => n.id === state.selectedId && Math.abs(n.t - t) < 0.25);
-  if (sel) {
-    updateNote(sel.id, { drawing: dataUrl, text: text ? (sel.text ? sel.text + ' ' : '') + text : sel.text });
-    toast(`Drawing added to note at ${fmt(sel.t)}`);
+  let id = d.noteId;
+  if (id && state.notes.some(n => n.id === id)) {
+    updateNote(id, { vec, drawing, t: t0, text });
   } else {
-    const n = addNote({ t, text, drawing: dataUrl });
-    state.selectedId = n.id;
-    toast(`Drawing saved at ${fmt(t)}`);
+    const sel = state.notes.find(n => n.id === state.selectedId && !n.vec && Math.abs(n.t - t0) < 0.25);
+    if (sel) { id = sel.id; updateNote(id, { vec, drawing, t: t0, text: text ? (sel.text ? sel.text + ' ' : '') + text : sel.text }); }
+    else { id = addNote({ t: t0, text, drawing, vec }).id; }
   }
+  state.selectedId = id;
+  toast(vec.keys.length > 1 ? `Drawing saved · follows the play ${fmtTenth(t0)}–${fmtTenth(t1)}` : `Drawing saved at ${fmt(t0)}`);
   exitDraw(true); renderAll();
 }
 
 /* Show saved drawings when playback is at their time */
+function noteSpan(n) { return n.vec ? vecRange(n.vec) : [n.t, n.t]; }
 function updateDrawShow(ct) {
   const img = $('#drawShow');
   const prev = state.prevCt; state.prevCt = ct;
-  if (state.draw) { if (!img.hidden) img.hidden = true; return; }
+  if (state.draw) {
+    if (!img.hidden) img.hidden = true;
+    if (!showCanvas.hidden) showCanvas.hidden = true;
+    if (ct !== state.draw.lastT && !state.draw.drag && !state.draw.cur) renderDrawing();
+    return;
+  }
   const pauseMode = settings.drawMode === 'pause';
-  // Pause mode: stop on a drawing when normal playback runs over its time.
+  // Pause mode: stop on a drawing when normal playback runs over its start.
   if (pauseMode && !video.paused && !video.seeking && prev != null && ct > prev && ct - prev < 1) {
-    const hit = state.notes.find(n => n.drawing && prev < n.t && n.t <= ct && n.id !== state.freezeSkip);
+    const hit = state.notes.find(n => (n.drawing || n.vec) && prev < n.t && n.t <= ct && n.id !== state.freezeSkip);
     if (hit) {
       video.pause(); video.currentTime = hit.t; state.freezeSkip = hit.id; ct = hit.t;
       toast('Paused on drawing · Space to continue', '', 1800);
@@ -1062,15 +1241,29 @@ function updateDrawShow(ct) {
   }
   if (state.freezeSkip) {
     const f = state.notes.find(n => n.id === state.freezeSkip);
-    if (!f || Math.abs(ct - f.t) > 0.5) state.freezeSkip = null;
+    if (!f || ct < f.t - 0.5 || ct > noteSpan(f)[1] + 0.5) state.freezeSkip = null;
   }
   const hold = pauseMode ? 0.15 : settings.drawHold;
   let found = null;
   for (const n of state.notes) {
-    if (!n.drawing) continue;
-    if (n.t - 0.05 <= ct && ct < n.t + hold) found = n;
+    if (!n.drawing && !n.vec) continue;
+    const [a, b] = noteSpan(n);
+    if (a - 0.05 <= ct && ct < b + hold) found = n;
     else if (n.t > ct) break;
   }
+  if (found && found.vec) {
+    if (!img.hidden) img.hidden = true;
+    const keyT = found.id + '@' + ct;
+    if (state.shownDrawing !== keyT) {
+      state.shownDrawing = keyT;
+      if (showCanvas.width !== found.vec.w || showCanvas.height !== found.vec.h) { showCanvas.width = found.vec.w; showCanvas.height = found.vec.h; }
+      sx.clearRect(0, 0, showCanvas.width, showCanvas.height);
+      vecShapes(found.vec, ct).forEach(s => drawShape(sx, s));
+      showCanvas.hidden = false;
+    }
+    return;
+  }
+  if (!showCanvas.hidden) showCanvas.hidden = true;
   const src = found ? found.drawing : null;
   if (src !== state.shownDrawing) {
     state.shownDrawing = src;
@@ -1339,7 +1532,7 @@ async function importJSON(file) {
   if (!data || data.app !== 'game-reviewer' || !Array.isArray(data.notes)) { toast('That is not a Game Reviewer backup', 'error'); return; }
   const notes = data.notes.filter(n => n && Number.isFinite(+n.t)).map(n => ({
     id: String(n.id || uid()), t: +n.t, tag: n.tag || null, text: String(n.text || ''),
-    drawing: typeof n.drawing === 'string' && n.drawing.startsWith('data:image/') ? n.drawing : null, created: n.created || Date.now(),
+    drawing: typeof n.drawing === 'string' && n.drawing.startsWith('data:image/') ? n.drawing : null, vec: validVec(n.vec), created: n.created || Date.now(),
   }));
   const cleanRanges = (arr, textKey) => (Array.isArray(arr) ? arr : [])
     .filter(r => r && Number.isFinite(+r.start) && Number.isFinite(+r.end) && +r.end > +r.start)
@@ -1786,7 +1979,9 @@ function renderHelp() {
     ['<kbd>[</kbd> <kbd>]</kbd>', 'Slower / faster'],
     ['<kbd>N</kbd>', `Write a note (pauses; stamped ${settings.leadTime}s earlier). Enter saves, Esc cancels.`],
     ...settings.tags.filter(t => t.key).map(t => [`<kbd>${esc(t.key.toUpperCase())}</kbd>`, `Tag: ${esc(t.name)} (Shift = tag + note)`]),
-    ['<kbd>D</kbd>', 'Draw on the frame. In draw mode: <kbd>1</kbd>–<kbd>4</kbd> tools, <kbd>Z</kbd> undo, <kbd>Enter</kbd> save'],
+    ['<kbd>D</kbd>', 'Draw on the frame (or edit the drawing showing). In draw mode: <kbd>1</kbd>–<kbd>4</kbd> tools, <kbd>5</kbd> adjust, <kbd>Z</kbd> undo, <kbd>Enter</kbd> save'],
+    ['In draw mode: <kbd>,</kbd> <kbd>.</kbd> / <kbd>←</kbd> <kbd>→</kbd>', 'Step a frame / half a second. Drag the drawing to set its position on that frame; it glides between positions'],
+    ['In draw mode: <kbd>[</kbd> <kbd>]</kbd> <kbd>K</kbd>', 'Previous / next position, keep drawing on screen until here'],
     ['<kbd>A</kbd> / <kbd>B</kbd> / <kbd>L</kbd>', 'Set loop start / end, toggle loop'],
     ['<kbd>X</kbd>', 'Dead time start / end (timeouts, free throws…), left out of the condensed game'],
     ['<kbd>C</kbd>', 'Highlight clip start / end'],
@@ -1840,12 +2035,19 @@ document.addEventListener('keydown', e => {
   if (!hasVideo()) return;
 
   if (state.draw) {
-    const tools = { 1: 'arrow', 2: 'circle', 3: 'line', 4: 'free' };
+    const tools = { 1: 'arrow', 2: 'circle', 3: 'line', 4: 'free', 5: 'move', v: 'move' };
     if (tools[k]) setTool(tools[k]);
-    else if (k === 'z') { state.draw.shapes.pop(); renderDrawing(); }
+    else if (k === 'z') undoDraw();
     else if (k === 'd') exitDraw();
     else if (e.key === 'Enter') saveDrawing();
-    else if (k === ' ') { /* stay paused while drawing */ }
+    else if (k === ',') frame(-1);
+    else if (k === '.') frame(1);
+    else if (k === 'arrowleft') { video.pause(); skip(e.shiftKey ? -2 : -0.5); }
+    else if (k === 'arrowright') { video.pause(); skip(e.shiftKey ? 2 : 0.5); }
+    else if (k === '[') jumpKey(-1);
+    else if (k === ']') jumpKey(1);
+    else if (k === 'k') keepHere();
+    else if (k === ' ') togglePlay();
     else return;
     e.preventDefault(); return;
   }

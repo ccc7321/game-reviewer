@@ -24,6 +24,14 @@ A single-file browser app for reviewing your own basketball games. Log timestamp
 
 Notes are stamped 3 seconds early by default (change "lead time" in Settings), since you usually react after the play.
 
+## Drawings that follow the play
+
+1. Pause where the play starts, press `D`, and draw (e.g. an arrow from you to the gap). Save with Enter.
+2. Press `D` again on that frame to edit it. The **✥ Adjust** tool is selected.
+3. Step forward (`.` one frame, `→` half a second) and drag the arrow's ends, or its middle, to where they should be now. Each frame you adjust becomes a position.
+4. `K` ("Keep until here") keeps the drawing on screen to the current frame without moving it.
+5. Save. During playback the video pauses at the first position; press Space and the drawing glides between positions, then disappears after the last one.
+
 ## Getting a video from YouTube
 
 Click **⬇ Get video** and paste a link to a video or playlist. The app writes a [yt-dlp](https://github.com/yt-dlp/yt-dlp) command: paste it into Terminal and the video is saved to `~/Movies/Game Reviewer` (you can change this), then the folder opens. One-time setup: `brew install yt-dlp ffmpeg`.
@@ -52,7 +60,7 @@ Cuts are frame-accurate, because each part is re-encoded. A full game takes a fe
 ```sh
 cd tests
 ffmpeg -f lavfi -i testsrc=duration=120:size=1280x720:rate=30 -pix_fmt yuv420p -c:v libvpx-vp9 -b:v 300k test.webm
-npm i -g playwright && node e2e.js && node e2e-edit.js
+npm i -g playwright && node e2e.js && node e2e-edit.js && node e2e-track.js
 ```
 
 The tests use WebM because headless Chromium can't decode H.264; real Chrome and Safari play MP4 fine.
