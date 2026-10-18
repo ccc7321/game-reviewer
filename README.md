@@ -24,6 +24,17 @@ A single-file browser app for reviewing your own basketball games. Log timestamp
 
 Notes are stamped 3 seconds early by default (change "lead time" in Settings), since you usually react after the play.
 
+## Journal and saving to a folder
+
+The **Journal** tab is a page per game: date (defaults to the video's date), opponent, result, how you felt, what went well, what to work on and other thoughts.
+
+Click **📁 Save to a folder…** (top right, Chrome or Edge) and pick a folder, such as `Documents/Basketball Journal` or the folder your videos are in. From then on every game saves itself there as:
+
+- `game.journal.md`: a readable journal entry (your reflections, stats, a time-stamped game log and notes by tag). Opens in any text editor, Obsidian, Notion import, etc.
+- `game.notes.json`: everything, used to restore.
+
+If browser data is ever cleared, or you use another computer with the same folder, opening the video loads everything back from the folder. After restarting Chrome you may need to click **Reconnect** once. In Safari, use Export → Download backup instead.
+
 ## Drawings that follow the play
 
 1. Pause where the play starts, press `D`, and draw (e.g. an arrow from you to the gap). Save with Enter.
@@ -60,7 +71,7 @@ Cuts are frame-accurate, because each part is re-encoded. A full game takes a fe
 ```sh
 cd tests
 ffmpeg -f lavfi -i testsrc=duration=120:size=1280x720:rate=30 -pix_fmt yuv420p -c:v libvpx-vp9 -b:v 300k test.webm
-npm i -g playwright && node e2e.js && node e2e-edit.js && node e2e-track.js
+npm i -g playwright && node e2e.js && node e2e-edit.js && node e2e-track.js && node e2e-journal.js
 ```
 
 The tests use WebM because headless Chromium can't decode H.264; real Chrome and Safari play MP4 fine.

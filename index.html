@@ -158,7 +158,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 
 /* Sidebar */
 .tabs { display: flex; border-bottom: 1px solid var(--border); flex: 0 0 auto; }
-.tabs button { flex: 1; border: 0; background: transparent; padding: 10px 6px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; }
+.tabs button { flex: 1; border: 0; background: transparent; padding: 10px 4px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; }
 .tabs button.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
 .panel { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 .panel h3 { margin: 6px 0 2px; font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
@@ -227,6 +227,19 @@ table.stats td.num { text-align: right; font-variant-numeric: tabular-nums; font
 .pend-band { opacity: .55; }
 details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 
+/* Journal and folder saving */
+.journal { display: flex; flex-direction: column; gap: 10px; }
+.journal label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: 13px; }
+.journal label span.hint { font-weight: 400; }
+.journal textarea { min-height: 76px; resize: vertical; line-height: 1.45; font-weight: 400; }
+.journal .meta { display: grid; grid-template-columns: 140px minmax(0, 1fr) 110px; gap: 8px; }
+.journal .meta input { width: 100%; font-weight: 400; }
+@media (max-width: 1100px) { .journal .meta { grid-template-columns: 1fr 1fr; } }
+.folder-btn { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.folder-btn.ok { color: var(--muted); }
+.folder-btn.warn { border-color: var(--accent); color: var(--accent); }
+.folder-box { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+
 /* Modal, tooltip, toasts */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
 .modal .box { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); max-width: 640px; width: 100%; max-height: 90vh; overflow: auto; padding: 18px; }
@@ -268,6 +281,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
   <input type="file" id="fileInput" accept="video/*,.mp4,.m4v,.mov,.webm,.mkv" hidden>
   <div id="fileName" class="file-name">No video loaded</div>
   <div class="spacer"></div>
+  <button id="folderBtn" class="btn folder-btn" hidden></button>
   <button id="themeBtn" class="btn ghost" title="Switch light / dark theme">◐ Theme</button>
   <button id="helpBtn" class="btn ghost" title="Keyboard shortcuts (?)">? Keys</button>
 </header>
@@ -357,6 +371,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
   <aside class="sidebar">
     <nav class="tabs" id="tabs">
       <button data-tab="notes" class="active">Notes</button>
+      <button data-tab="journal">Journal</button>
       <button data-tab="edit">Edit</button>
       <button data-tab="stats">Stats</button>
       <button data-tab="export">Export</button>
@@ -371,6 +386,28 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
         <span class="hint" id="countLabel"></span>
       </div>
       <ul class="notes" id="noteList"></ul>
+    </div>
+
+    <div class="panel journal" data-panel="journal" hidden>
+      <div class="meta">
+        <label>Date<input type="date" id="jDate" data-j="date"></label>
+        <label>Opponent<input type="text" id="jOpp" data-j="opponent" placeholder="e.g. Hawks"></label>
+        <label>Result<input type="text" id="jResult" data-j="result" placeholder="W 54–48"></label>
+      </div>
+      <label>How I felt <span class="hint">Energy, confidence, body, mindset</span><textarea data-j="felt"></textarea></label>
+      <label>What went well<textarea data-j="good"></textarea></label>
+      <label>What to work on<textarea data-j="work"></textarea></label>
+      <label>Other thoughts<textarea data-j="other"></textarea></label>
+      <p class="hint" id="jHint">Open a game video to write about it.</p>
+      <h3>Journal folder</h3>
+      <div class="folder-box">
+        <div id="folderStatus"></div>
+        <div class="row">
+          <button class="btn small primary" id="folderChoose">Choose journal folder…</button>
+          <button class="btn small" id="folderReconnect" hidden>Reconnect</button>
+        </div>
+        <p class="hint">Every game is saved there automatically as two files: <code>game.notes.json</code> (everything, used to restore) and <code>game.journal.md</code> (a readable journal entry). If browser data is ever cleared, opening the video brings everything back from the folder. Tip: pick the folder your videos are in, or a "Basketball Journal" folder in Documents.</p>
+      </div>
     </div>
 
     <div class="panel" data-panel="edit" hidden>
@@ -579,6 +616,7 @@ const state = {
   loopA: null, loopB: null, loopOn: false,
   entry: null, playlist: null, draw: null,
   cuts: [], clips: [], pendingCut: null, pendingClip: null, skipDead: false,
+  journal: {}, fileDate: '',
   lastPosSave: 0, shownDrawing: null,
 };
 
@@ -665,6 +703,8 @@ function openFile(file) {
   if (state.url) URL.revokeObjectURL(state.url);
   state.url = URL.createObjectURL(file);
   state.fileName = file.name;
+  state.fileDate = file.lastModified ? localDate(new Date(file.lastModified)) : '';
+  state.journal = {};
   state.baseName = file.name.replace(/\.[^.]+$/, '');
   state.key = null; state.notes = []; state.selectedId = null; state.activeId = null;
   state.loopA = state.loopB = null; state.loopOn = false;
@@ -680,6 +720,8 @@ video.addEventListener('loadedmetadata', () => {
   state.notes = saved && Array.isArray(saved.notes) ? saved.notes : [];
   state.cuts = saved && Array.isArray(saved.cuts) ? saved.cuts : [];
   state.clips = saved && Array.isArray(saved.clips) ? saved.clips : [];
+  state.journal = saved && saved.journal && typeof saved.journal === 'object' ? saved.journal : {};
+  state.savedAt = (saved && saved.savedAt) || 0;
   sortNotes();
   $('#empty').hidden = true;
   video.playbackRate = 1;
@@ -690,7 +732,8 @@ video.addEventListener('loadedmetadata', () => {
   } else if (state.notes.length) {
     toast(`${state.notes.length} notes restored`);
   }
-  layoutOverlays(); renderAll();
+  layoutOverlays(); renderAll(); renderJournal();
+  syncFromFolder();
 });
 video.addEventListener('error', () => {
   if (!state.url) return;
@@ -724,8 +767,12 @@ window.addEventListener('drop', e => {
 function sortNotes() { state.notes.sort((a, b) => a.t - b.t); }
 function saveNotes() {
   if (!state.key) return;
-  store.set(state.key, { app: 'game-reviewer', video: { name: state.fileName, duration: dur() }, notes: state.notes, cuts: state.cuts, clips: state.clips });
+  // Always move forward, even if a folder copy carried a later clock time.
+  state.savedAt = Math.max(Date.now(), (state.savedAt || 0) + 1);
+  store.set(state.key, { app: 'game-reviewer', video: { name: state.fileName, duration: dur() }, savedAt: state.savedAt, notes: state.notes, cuts: state.cuts, clips: state.clips, journal: state.journal });
+  scheduleFolderSave();
 }
+function localDate(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 function addNote(n) {
   const note = { id: uid(), t: clamp(n.t, 0, dur()), tag: n.tag || null, text: n.text || '', drawing: n.drawing || null, vec: n.vec || null, created: Date.now() };
   state.notes.push(note); sortNotes(); saveNotes(); renderAll();
@@ -1487,31 +1534,56 @@ function toCSV() {
   return '﻿' + rows.map(r => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
 }
 function toMD() {
-  const s = computeStats();
-  const out = [`# Game review: ${state.fileName}`, '',
-    `Video length ${fmt(dur())} · ${state.notes.length} notes · exported ${new Date().toISOString().slice(0, 10)}`, '',
-    '## Stats', '',
+  const s = computeStats(), j = journalWithDefaults();
+  const titleBits = [j.date, j.opponent ? 'vs ' + j.opponent : '', j.result].filter(Boolean);
+  const oneLine = t => String(t).replace(/\s*\n+\s*/g, ' ');
+  const out = [`# ${titleBits.length ? titleBits.join(' · ') : 'Game review: ' + state.fileName}`, '',
+    `_${state.fileName} · video ${fmt(dur())} · ${state.notes.length} notes · updated ${localDate(new Date())}_`, ''];
+  [['felt', 'How I felt'], ['good', 'What went well'], ['work', 'What to work on'], ['other', 'Other thoughts']].forEach(([k, h]) => {
+    if (j[k] && j[k].trim()) out.push(`## ${h}`, '', j[k].trim(), '');
+  });
+  out.push('## Stats', '',
     `- **Field goals:** ${s.att ? `${s.made}/${s.att} (${s.pct.toFixed(1)}%)` : 'none logged'}`,
     `- **Minutes played:** ${s.hasCourt ? fmt(s.played) + (s.openEnd ? ' (last stint runs to end of video)' : '') : 'not tracked'}`, '',
     '| Tag | Count |', '|---|---:|',
     ...settings.tags.map(t => `| ${t.name} | ${s.counts[t.id]} |`),
-    `| Untagged | ${s.untagged} |`, '',
-    '## Notes by tag', ''];
-  const groups = settings.tags.map(t => ({ name: t.name, notes: state.notes.filter(n => n.tag === t.id) }));
-  groups.push({ name: 'Untagged', notes: state.notes.filter(n => !tagById(n.tag)) });
-  groups.filter(g => g.notes.length).forEach(g => {
-    out.push(`### ${g.name} (${g.notes.length})`, '');
-    g.notes.forEach(n => out.push(`- **${fmt(n.t)}**${n.text ? ' ' + n.text.replace(/\n+/g, ' ') : ''}${n.drawing ? ' _(drawing)_' : ''}`));
-    out.push('');
-  });
+    `| Untagged | ${s.untagged} |`, '');
+  if (state.notes.length) {
+    out.push('## Game log', '');
+    state.notes.forEach(n => {
+      const tag = tagName(n.tag);
+      out.push(`- **${fmt(n.t)}**${tag ? ` [${tag}]` : ''}${n.text ? ' ' + oneLine(n.text) : ''}${n.drawing || n.vec ? ' _(drawing)_' : ''}`);
+    });
+    out.push('', '## Notes by tag', '');
+    const groups = settings.tags.map(t => ({ name: t.name, notes: state.notes.filter(n => n.tag === t.id) }));
+    groups.push({ name: 'Untagged', notes: state.notes.filter(n => !tagById(n.tag)) });
+    groups.filter(g => g.notes.length).forEach(g => {
+      out.push(`### ${g.name} (${g.notes.length})`, '');
+      g.notes.forEach(n => out.push(`- **${fmt(n.t)}**${n.text ? ' ' + oneLine(n.text) : ''}${n.drawing || n.vec ? ' _(drawing)_' : ''}`));
+      out.push('');
+    });
+  }
   return out.join('\n');
 }
 function toJSON() {
   return JSON.stringify({
-    app: 'game-reviewer', version: 1, exported: new Date().toISOString(),
+    app: 'game-reviewer', version: 1, exported: new Date().toISOString(), savedAt: state.savedAt || Date.now(),
     video: { name: state.fileName, duration: dur() },
-    tags: settings.tags, notes: state.notes, cuts: state.cuts, clips: state.clips,
+    tags: settings.tags, journal: journalWithDefaults(), notes: state.notes, cuts: state.cuts, clips: state.clips,
   }, null, 2);
+}
+// Cleans a backup/journal file into notes, dead time, clips and journal.
+function parseBackup(data) {
+  const notes = data.notes.filter(n => n && Number.isFinite(+n.t)).map(n => ({
+    id: String(n.id || uid()), t: +n.t, tag: n.tag || null, text: String(n.text || ''),
+    drawing: typeof n.drawing === 'string' && n.drawing.startsWith('data:image/') ? n.drawing : null, vec: validVec(n.vec), created: n.created || Date.now(),
+  }));
+  const cleanRanges = (arr, textKey) => (Array.isArray(arr) ? arr : [])
+    .filter(r => r && Number.isFinite(+r.start) && Number.isFinite(+r.end) && +r.end > +r.start)
+    .map(r => ({ id: String(r.id || uid()), start: +r.start, end: +r.end, [textKey]: String(r[textKey] || '') }));
+  const journal = {};
+  if (data.journal && typeof data.journal === 'object') JOURNAL_FIELDS.forEach(f => { if (typeof data.journal[f] === 'string') journal[f] = data.journal[f]; });
+  return { notes, cuts: cleanRanges(data.cuts, 'label'), clips: cleanRanges(data.clips, 'caption'), journal };
 }
 $$('[data-export]').forEach(b => b.onclick = () => {
   if (!hasVideo()) { toast('Open a video first'); return; }
@@ -1530,14 +1602,7 @@ async function importJSON(file) {
   let data;
   try { data = JSON.parse(await file.text()); } catch { toast('That file is not valid JSON', 'error'); return; }
   if (!data || data.app !== 'game-reviewer' || !Array.isArray(data.notes)) { toast('That is not a Game Reviewer backup', 'error'); return; }
-  const notes = data.notes.filter(n => n && Number.isFinite(+n.t)).map(n => ({
-    id: String(n.id || uid()), t: +n.t, tag: n.tag || null, text: String(n.text || ''),
-    drawing: typeof n.drawing === 'string' && n.drawing.startsWith('data:image/') ? n.drawing : null, vec: validVec(n.vec), created: n.created || Date.now(),
-  }));
-  const cleanRanges = (arr, textKey) => (Array.isArray(arr) ? arr : [])
-    .filter(r => r && Number.isFinite(+r.start) && Number.isFinite(+r.end) && +r.end > +r.start)
-    .map(r => ({ id: String(r.id || uid()), start: +r.start, end: +r.end, [textKey]: String(r[textKey] || '') }));
-  const cuts = cleanRanges(data.cuts, 'label'), clips = cleanRanges(data.clips, 'caption');
+  const { notes, cuts, clips, journal } = parseBackup(data);
   const v = data.video || {};
   if (Array.isArray(data.tags) && data.tags.length) {
     settings.tags = data.tags.filter(t => t && t.id && t.name).map(t => ({ id: String(t.id), name: String(t.name), key: String(t.key || '').slice(0, 1).toLowerCase(), color: /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : '#94a3b8' }));
@@ -1546,11 +1611,11 @@ async function importJSON(file) {
   if (hasVideo()) {
     if (v.name && v.name !== state.fileName && !confirm(`This backup is for "${v.name}". Import its notes into "${state.fileName}" anyway?`)) return;
     if (state.notes.length && !confirm(`Replace the ${state.notes.length} current notes with ${notes.length} notes from the backup?`)) return;
-    state.notes = notes; state.cuts = cuts; state.clips = clips; sortNotes(); saveNotes(); renderEverything();
+    state.notes = notes; state.cuts = cuts; state.clips = clips; state.journal = journal; sortNotes(); saveNotes(); renderEverything(); renderJournal();
     toast(`Imported ${notes.length} notes`);
   } else if (v.name && Number.isFinite(+v.duration)) {
     const key = 'notes:' + v.name + '|' + Math.round(+v.duration);
-    store.set(key, { app: 'game-reviewer', video: { name: v.name, duration: +v.duration }, notes, cuts, clips });
+    store.set(key, { app: 'game-reviewer', video: { name: v.name, duration: +v.duration }, savedAt: Date.now(), notes, cuts, clips, journal });
     renderEverything();
     toast(`Imported ${notes.length} notes. Open "${v.name}" to see them.`, '', 5000);
   } else toast('Open the video first, then import', 'error');
@@ -1889,6 +1954,166 @@ $('#ytScript').onclick = () => {
   toast('Saved get-video.sh. In Terminal: type sh and a space, drag the script in, press Return.', '', 5000);
 };
 
+/* ---------- Game journal ---------- */
+const JOURNAL_FIELDS = ['date', 'opponent', 'result', 'felt', 'good', 'work', 'other'];
+function journalWithDefaults() {
+  const j = {}; JOURNAL_FIELDS.forEach(f => j[f] = state.journal[f] || '');
+  if (!j.date) j.date = state.fileDate || '';
+  return j;
+}
+function renderJournal() {
+  const j = journalWithDefaults(), on = hasVideo();
+  $$('[data-j]').forEach(el => { el.value = j[el.dataset.j] || ''; el.disabled = !on; });
+  $('#jHint').textContent = on ? `Saved automatically${folder.status === 'ok' ? ' to this browser and your journal folder' : ' in this browser'}.` : 'Open a game video to write about it.';
+}
+$('[data-panel=journal]').addEventListener('keydown', e => { if (e.key === 'Escape' && e.target.dataset && e.target.dataset.j) { e.preventDefault(); e.target.blur(); } });
+let journalTimer = null;
+$('[data-panel=journal]').addEventListener('input', e => {
+  const f = e.target.dataset && e.target.dataset.j; if (!f || !state.key) return;
+  state.journal[f] = e.target.value;
+  clearTimeout(journalTimer); journalTimer = setTimeout(saveNotes, 400);
+});
+
+/* ---------- Journal folder: auto-save each game as files (Chrome/Edge) ---------- */
+// The folder handle is kept in IndexedDB so it survives reloads; Chrome may ask
+// once per visit to allow access again ("Reconnect").
+const idb = {
+  open() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('gameReviewer', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('kv');
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+  },
+  async run(mode, fn) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const q = fn(db.transaction('kv', mode).objectStore('kv'));
+      q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error);
+    });
+  },
+  get(k) { return this.run('readonly', s => s.get(k)); },
+  set(k, v) { return this.run('readwrite', s => s.put(v, k)); },
+};
+const FS_SUPPORTED = typeof window.showDirectoryPicker === 'function';
+const folder = { handle: null, status: FS_SUPPORTED ? 'none' : 'unsupported', saving: false, timer: null, lastSaved: 0, error: '' };
+
+function renderFolder() {
+  const b = $('#folderBtn'), st = folder.status, name = folder.handle ? folder.handle.name : '';
+  b.hidden = st === 'unsupported';
+  b.classList.toggle('ok', st === 'ok'); b.classList.toggle('warn', st === 'needs-permission' || st === 'error');
+  b.textContent = st === 'none' ? '📁 Save to a folder…'
+    : st === 'needs-permission' ? '📁 Reconnect journal folder'
+    : st === 'error' ? '⚠ Folder save failed'
+    : folder.saving ? `Saving to ${name}…` : `✓ Saved to ${name}`;
+  b.title = st === 'ok' ? `Notes and journal are saved automatically to the folder "${name}". Click to change folder.` : '';
+  const msg = st === 'unsupported' ? 'Saving to a folder works in Chrome and Edge. In this browser, use Export → Download backup after each game.'
+    : st === 'none' ? 'Not set up yet. Your notes are only in this browser.'
+    : st === 'needs-permission' ? `Chrome needs your OK to keep saving to "${name}". Click Reconnect.`
+    : st === 'error' ? `Couldn't save to "${name}": ${folder.error}`
+    : `Saving to <b>${esc(name)}</b>` + (folder.lastSaved ? ` · last saved ${new Date(folder.lastSaved).toLocaleTimeString()}` : '');
+  $('#folderStatus').innerHTML = st === 'needs-permission' || st === 'none' || st === 'unsupported' || st === 'error' ? esc(msg).replace(/&lt;b&gt;|&lt;\/b&gt;/g, '') : msg;
+  $('#folderChoose').hidden = st === 'unsupported';
+  $('#folderChoose').textContent = folder.handle ? 'Change folder…' : 'Choose journal folder…';
+  $('#folderReconnect').hidden = st !== 'needs-permission' && st !== 'error';
+  if ($('#jHint') && hasVideo()) $('#jHint').textContent = `Saved automatically${st === 'ok' ? ' to this browser and your journal folder' : ' in this browser'}.`;
+}
+async function initFolder() {
+  if (!FS_SUPPORTED) { renderFolder(); return; }
+  try {
+    const h = await idb.get('journalDir');
+    if (h) {
+      folder.handle = h;
+      folder.status = (await h.queryPermission({ mode: 'readwrite' })) === 'granted' ? 'ok' : 'needs-permission';
+    }
+  } catch { /* no saved folder */ }
+  renderFolder();
+  if (folder.status === 'ok' && hasVideo()) syncFromFolder();
+}
+async function chooseFolder() {
+  try {
+    const h = await window.showDirectoryPicker({ id: 'game-reviewer-journal', mode: 'readwrite', startIn: 'documents' });
+    folder.handle = h; folder.status = 'ok';
+    try { await idb.set('journalDir', h); } catch { /* can't remember it; still works this visit */ }
+    renderFolder(); renderJournal();
+    toast(`Saving your journal to "${h.name}"`);
+    if (hasVideo()) { await syncFromFolder(); scheduleFolderSave(0); }
+  } catch (e) { if (e.name !== 'AbortError') toast('Could not use that folder: ' + e.message, 'error'); }
+}
+async function reconnectFolder() {
+  if (!folder.handle) return chooseFolder();
+  try {
+    const p = await folder.handle.requestPermission({ mode: 'readwrite' });
+    if (p !== 'granted') { toast('Folder access was not allowed', 'error'); return; }
+    folder.status = 'ok'; renderFolder(); renderJournal();
+    if (hasVideo()) { await syncFromFolder(); scheduleFolderSave(0); }
+  } catch (e) { toast('Could not reconnect: ' + e.message, 'error'); }
+}
+function folderFileBase() { return state.baseName.replace(/[\\/:*?"<>|]/g, '_'); }
+function scheduleFolderSave(delay = 800) {
+  if (folder.status !== 'ok' || !state.key) return;
+  clearTimeout(folder.timer);
+  folder.timer = setTimeout(writeFolder, delay);
+}
+async function writeFile(name, text) {
+  const fh = await folder.handle.getFileHandle(name, { create: true });
+  const w = await fh.createWritable(); await w.write(text); await w.close();
+}
+async function writeFolder() {
+  if (folder.status !== 'ok' || !state.key) return;
+  folder.saving = true; renderFolder();
+  try {
+    const base = folderFileBase();
+    await writeFile(base + '.notes.json', toJSON());
+    await writeFile(base + '.journal.md', toMD());
+    folder.lastSaved = Date.now();
+  } catch (e) {
+    if (e.name === 'NotAllowedError' || e.name === 'SecurityError') folder.status = 'needs-permission';
+    else { folder.status = 'error'; folder.error = e.message; }
+  }
+  folder.saving = false; renderFolder();
+}
+// When a video opens: use the folder copy if it's newer than this browser's
+// (e.g. browser data was cleared), otherwise bring the folder up to date.
+async function syncFromFolder() {
+  if (folder.status !== 'ok' || !state.key) return;
+  const key = state.key;
+  let data = null, fileTime = 0;
+  try {
+    const fh = await folder.handle.getFileHandle(folderFileBase() + '.notes.json');
+    const f = await fh.getFile();
+    data = JSON.parse(await f.text());
+    fileTime = +data.savedAt || Date.parse(data.exported) || f.lastModified;
+  } catch (e) {
+    if (e.name === 'NotAllowedError') { folder.status = 'needs-permission'; renderFolder(); return; }
+    data = null;   // no file yet (or unreadable)
+  }
+  if (key !== state.key) return;   // another video was opened meanwhile
+  const valid = data && data.app === 'game-reviewer' && Array.isArray(data.notes) &&
+    !(data.video && Number.isFinite(+data.video.duration) && Math.abs(+data.video.duration - dur()) > 1.5);
+  const local = store.get(state.key, null), localTime = (local && local.savedAt) || 0;
+  const localEmpty = !state.notes.length && !state.cuts.length && !state.clips.length && !Object.values(state.journal).some(Boolean);
+  if (valid && (fileTime > localTime || localEmpty)) {
+    const b = parseBackup(data);
+    if (!b.notes.length && !b.cuts.length && !b.clips.length && !Object.values(b.journal).some(Boolean) && !localEmpty) { scheduleFolderSave(0); return; }
+    state.notes = b.notes; state.cuts = b.cuts; state.clips = b.clips; state.journal = b.journal;
+    sortNotes();
+    state.savedAt = fileTime;
+    store.set(state.key, { app: 'game-reviewer', video: { name: state.fileName, duration: dur() }, savedAt: fileTime, notes: state.notes, cuts: state.cuts, clips: state.clips, journal: state.journal });
+    renderAll(); renderJournal();
+    if (b.notes.length || Object.values(b.journal).some(Boolean)) toast(`Loaded ${b.notes.length} notes and your journal from "${folder.handle.name}"`, '', 3500);
+  } else if (!localEmpty) {
+    scheduleFolderSave(0);
+  }
+}
+$('#folderBtn').onclick = () => {
+  if (folder.status === 'none') chooseFolder();
+  else if (folder.status === 'needs-permission' || folder.status === 'error') reconnectFolder();
+  else if (confirm(`Notes are saving to "${folder.handle.name}". Choose a different folder?`)) chooseFolder();
+};
+$('#folderChoose').onclick = chooseFolder;
+$('#folderReconnect').onclick = reconnectFolder;
+
 /* ---------- Settings ---------- */
 function renderSettings() {
   $('#setLead').value = settings.leadTime;
@@ -2126,7 +2351,7 @@ function renderEverything(withSettings = true) {
 
 window.addEventListener('beforeunload', () => { if (state.key) store.set('pos:' + state.key, video.currentTime); });
 
-applyTheme(); renderSpeed(); updatePlayBtn(); renderEverything();
+applyTheme(); renderSpeed(); updatePlayBtn(); renderEverything(); renderJournal(); initFolder();
 requestAnimationFrame(tick);
 </script>
 </body>
