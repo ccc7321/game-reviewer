@@ -437,6 +437,11 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
       <label class="field"><span>Lead time: seconds subtracted from a note's time, since you notice a play after it happens</span><input type="number" id="setLead" min="0" max="30" step="0.5"></label>
       <label class="field"><span>Playlist clip: seconds before the note</span><input type="number" id="setBefore" min="0" max="60" step="0.5"></label>
       <label class="field"><span>Playlist clip: seconds after the note</span><input type="number" id="setAfter" min="0.5" max="120" step="0.5"></label>
+      <h3>Drawings</h3>
+      <label class="field"><span>When playback reaches a drawing</span>
+        <select id="setDrawMode"><option value="pause">Pause on it</option><option value="timed">Keep playing</option></select></label>
+      <label class="field" id="drawHoldRow"><span>Seconds to show it while playing</span><input type="number" id="setDrawHold" min="0.5" max="10" step="0.5"></label>
+      <p class="hint">"Pause on it" stops on the frame you drew on, so the drawing lines up with the players. Press Space to continue and it disappears.</p>
       <h3>Tags</h3>
       <p class="hint">Press the hotkey to drop a tag without pausing. Shift + hotkey also opens a note. Keys N, D, A, B, L, X, C are taken.</p>
       <div id="tagEditor" style="display:flex;flex-direction:column;gap:6px"></div>
@@ -505,7 +510,6 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 const FPS = 30;
 const SPEEDS = [0.25, 0.5, 1, 1.5, 2];
 const PREFIX = 'gameReviewer.v1.';
-const DRAW_HOLD = 3;          // seconds a drawing stays visible after its time
 const CUE_LEN = 4;            // subtitle cue length
 const MAX_DRAW_W = 960;       // drawing resolution cap, to keep storage small
 const COLORS = ['#ff3b30', '#ffd60a', '#32d7ff', '#ffffff'];
@@ -547,6 +551,8 @@ function loadSettings() {
     clipAfter: num(s.clipAfter, 6),
     theme: s.theme === 'light' ? 'light' : 'dark',
     subMode: ['burn', 'soft', 'none'].includes(s.subMode) ? s.subMode : 'burn',
+    drawMode: s.drawMode === 'timed' ? 'timed' : 'pause',
+    drawHold: num(s.drawHold, 2),
     ytDest: typeof s.ytDest === 'string' && s.ytDest.trim() ? s.ytDest : '~/Movies/Game Reviewer',
     ytQuality: ['1080', '720', 'best'].includes(s.ytQuality) ? s.ytQuality : '1080',
     tags: Array.isArray(s.tags) && s.tags.length ? s.tags : clone(DEFAULT_TAGS),
@@ -1043,11 +1049,26 @@ function saveDrawing() {
 /* Show saved drawings when playback is at their time */
 function updateDrawShow(ct) {
   const img = $('#drawShow');
+  const prev = state.prevCt; state.prevCt = ct;
   if (state.draw) { if (!img.hidden) img.hidden = true; return; }
+  const pauseMode = settings.drawMode === 'pause';
+  // Pause mode: stop on a drawing when normal playback runs over its time.
+  if (pauseMode && !video.paused && !video.seeking && prev != null && ct > prev && ct - prev < 1) {
+    const hit = state.notes.find(n => n.drawing && prev < n.t && n.t <= ct && n.id !== state.freezeSkip);
+    if (hit) {
+      video.pause(); video.currentTime = hit.t; state.freezeSkip = hit.id; ct = hit.t;
+      toast('Paused on drawing · Space to continue', '', 1800);
+    }
+  }
+  if (state.freezeSkip) {
+    const f = state.notes.find(n => n.id === state.freezeSkip);
+    if (!f || Math.abs(ct - f.t) > 0.5) state.freezeSkip = null;
+  }
+  const hold = pauseMode ? 0.15 : settings.drawHold;
   let found = null;
   for (const n of state.notes) {
     if (!n.drawing) continue;
-    if (n.t - 0.05 <= ct && ct < n.t + DRAW_HOLD) found = n;
+    if (n.t - 0.05 <= ct && ct < n.t + hold) found = n;
     else if (n.t > ct) break;
   }
   const src = found ? found.drawing : null;
@@ -1680,6 +1701,9 @@ function renderSettings() {
   $('#setLead').value = settings.leadTime;
   $('#setBefore').value = settings.clipBefore;
   $('#setAfter').value = settings.clipAfter;
+  $('#setDrawMode').value = settings.drawMode;
+  $('#setDrawHold').value = settings.drawHold;
+  $('#drawHoldRow').hidden = settings.drawMode !== 'timed';
   $('#tagEditor').innerHTML = settings.tags.map(t => `
     <div class="tag-edit" data-tid="${esc(t.id)}">
       <input type="color" value="${esc(t.color)}" data-f="color" aria-label="Colour">
@@ -1735,6 +1759,13 @@ $('#clearNotesBtn').onclick = () => {
     settings[k] = clamp(num(e.target.value, settings[k]), lo, hi); e.target.value = settings[k];
     saveSettings(); renderCommands();
   });
+});
+
+$('#setDrawMode').addEventListener('change', e => {
+  settings.drawMode = e.target.value; saveSettings(); renderSettings();
+});
+$('#setDrawHold').addEventListener('change', e => {
+  settings.drawHold = clamp(num(e.target.value, settings.drawHold), 0.5, 10); e.target.value = settings.drawHold; saveSettings();
 });
 
 function applyTheme() { document.documentElement.dataset.theme = settings.theme; }
