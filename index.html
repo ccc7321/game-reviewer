@@ -239,6 +239,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 .journal .meta { display: grid; grid-template-columns: 140px minmax(0, 1fr) 110px; gap: 8px; }
 .journal .meta input { width: 100%; font-weight: 400; }
 @media (max-width: 1100px) { .journal .meta { grid-template-columns: 1fr 1fr; } }
+#ytCmd { white-space: pre-wrap; word-break: break-all; }
 .folder-btn { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 .folder-btn.ok { color: var(--muted); }
 .folder-btn.warn { border-color: var(--accent); color: var(--accent); }
@@ -539,6 +540,20 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
         </select>
       </div>
       <label class="row"><span>Save to</span><input type="text" id="ytDest" style="flex:1" spellcheck="false"></label>
+      <div class="row">
+        <span>Sign in with cookies from:</span>
+        <select id="ytCookies" aria-label="Use cookies from">
+          <option value="">Don't use cookies</option>
+          <option value="chrome">Chrome</option>
+          <option value="safari">Safari</option>
+          <option value="firefox">Firefox</option>
+          <option value="edge">Edge</option>
+          <option value="brave">Brave</option>
+          <option value="file">A cookies.txt file…</option>
+        </select>
+        <input type="text" id="ytCookieFile" placeholder="~/Downloads/cookies.txt" style="flex:1;min-width:160px" spellcheck="false" hidden aria-label="Path to cookies.txt">
+      </div>
+      <p class="hint" id="ytCookieHint" hidden></p>
       <textarea id="ytCmd" class="cmd" rows="7" readonly></textarea>
       <div class="row">
         <button class="btn primary" id="ytCopy">Copy command</button>
@@ -609,6 +624,8 @@ function loadSettings() {
     drawHold: num(s.drawHold, 2),
     ytDest: typeof s.ytDest === 'string' && s.ytDest.trim() ? s.ytDest : '~/Movies/Game Reviewer',
     ytQuality: ['1080', '720', 'best'].includes(s.ytQuality) ? s.ytQuality : '1080',
+    ytCookies: ['', 'chrome', 'safari', 'firefox', 'edge', 'brave', 'file'].includes(s.ytCookies) ? s.ytCookies : '',
+    ytCookieFile: typeof s.ytCookieFile === 'string' ? s.ytCookieFile : '',
     tags: Array.isArray(s.tags) && s.tags.length ? s.tags : clone(DEFAULT_TAGS),
   };
 }
@@ -1924,7 +1941,8 @@ function ytOptions() {
   const listChoice = ($$('input[name=ytList]').find(r => r.checked) || {}).value || 'all';
   const items = $('#ytItems').value.replace(/\s+/g, '');
   const some = hasList && listChoice === 'some';
-  return { url, hasList, playlist: hasList && (listChoice === 'all' || some), items: some ? items : '', itemsBad: some && !/^\d+(-\d+)?(,\d+(-\d+)?)*$/.test(items), quality: $('#ytQuality').value, dest: $('#ytDest').value };
+  const cookies = $('#ytCookies').value, cookieFile = $('#ytCookieFile').value.trim();
+  return { url, hasList, cookies, cookieFile, cookieBad: cookies === 'file' && !cookieFile, playlist: hasList && (listChoice === 'all' || some), items: some ? items : '', itemsBad: some && !/^\d+(-\d+)?(,\d+(-\d+)?)*$/.test(items), quality: $('#ytQuality').value, dest: $('#ytDest').value };
 }
 /* Prefer H.264 + AAC so YouTube's own MP4 is used as-is; --recode-video only
    re-encodes when the download didn't end up as .mp4 (e.g. VP9/AV1 only). */
@@ -1934,6 +1952,7 @@ function buildYtCommand(o) {
   const out = o.playlist ? '%(playlist_title,playlist)s/%(playlist_index)03d - %(title)s.%(ext)s' : '%(title)s.%(ext)s';
   const args = [
     'yt-dlp', o.playlist ? '--yes-playlist' : '--no-playlist', ...(o.items ? ['-I', shq(o.items)] : []),
+    ...(o.cookies === 'file' ? ['--cookies', shPath(o.cookieFile)] : o.cookies ? ['--cookies-from-browser', o.cookies] : []),
     '-f', shq('bv*+ba/b'), '-S', shq(sort),
     '--recode-video', 'mp4',
     '--postprocessor-args', shq('VideoConvertor+ffmpeg:-c:v libx264 -crf 18 -preset medium -c:a aac -b:a 192k -movflags +faststart'),
@@ -1947,13 +1966,27 @@ function renderYt() {
   $('#ytPlaylistRow').hidden = !o.hasList;
   const valid = /^https?:\/\/\S+$/.test(o.url);
   $('#ytCmd').value = !valid ? (o.url ? 'That doesn\'t look like a link. It should start with https://' : 'Paste a link above and the command appears here.')
+    : o.cookieBad ? 'Type where your cookies.txt file is, e.g. ~/Downloads/cookies.txt'
     : o.itemsBad ? 'Type which playlist positions to download, e.g. 2-5 or 1,3,7 (numbers as shown in the playlist).'
     : buildYtCommand(o);
-  $('#ytCopy').disabled = $('#ytScript').disabled = !valid || o.itemsBad;
+  $('#ytCopy').disabled = $('#ytScript').disabled = !valid || o.itemsBad || o.cookieBad;
+  $('#ytCookieFile').hidden = o.cookies !== 'file';
+  const hints = {
+    chrome: 'Uses your YouTube sign-in from Chrome. Your Mac may ask for your password once to let yt-dlp read Chrome\'s cookies ("Chrome Safe Storage"): click Allow.',
+    safari: 'Uses your YouTube sign-in from Safari. Terminal needs Full Disk Access first: System Settings → Privacy & Security → Full Disk Access → turn on Terminal, then reopen Terminal.',
+    firefox: 'Uses your YouTube sign-in from Firefox.',
+    edge: 'Uses your YouTube sign-in from Edge. Your Mac may ask for your password once: click Allow.',
+    brave: 'Uses your YouTube sign-in from Brave. Your Mac may ask for your password once: click Allow.',
+    file: 'Use a cookies.txt exported from a browser extension such as "Get cookies.txt LOCALLY". Keep this file private: it can sign in as you.',
+  };
+  $('#ytCookieHint').hidden = !o.cookies;
+  $('#ytCookieHint').textContent = (hints[o.cookies] || '') + (o.cookies ? ' Use this when YouTube says "Sign in to confirm you\'re not a bot", or for private, members-only or age-restricted videos you can watch when signed in.' : '');
 }
 function openGet() {
   $('#ytDest').value = settings.ytDest;
   $('#ytQuality').value = settings.ytQuality;
+  $('#ytCookies').value = settings.ytCookies;
+  $('#ytCookieFile').value = settings.ytCookieFile;
   $('#getModal').hidden = false; renderYt(); $('#ytUrl').focus();
 }
 function closeGet() { $('#getModal').hidden = true; }
@@ -1979,7 +2012,9 @@ $('#ytItems').addEventListener('input', () => { $('input[name=ytList][value=some
 $('#getModal').addEventListener('input', renderYt);
 $('#getModal').addEventListener('change', () => {
   settings.ytDest = $('#ytDest').value.trim() || '~/Movies/Game Reviewer';
-  settings.ytQuality = $('#ytQuality').value; saveSettings(); renderYt();
+  settings.ytQuality = $('#ytQuality').value;
+  settings.ytCookies = $('#ytCookies').value; settings.ytCookieFile = $('#ytCookieFile').value.trim();
+  saveSettings(); renderYt();
 });
 $('#ytCopy').onclick = () => copyText($('#ytCmd').value);
 $('#ytScript').onclick = () => {

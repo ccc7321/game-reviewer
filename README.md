@@ -47,7 +47,7 @@ If browser data is ever cleared, or you use another computer with the same folde
 
 Click **⬇ Get video** and paste a link to a video or playlist. The app writes a [yt-dlp](https://github.com/yt-dlp/yt-dlp) command: paste it into Terminal and the video is saved to `~/Movies/Game Reviewer` (you can change this), then the folder opens. One-time setup: `brew install yt-dlp ffmpeg`.
 
-The command prefers YouTube's own H.264 MP4, so most videos need no re-encoding. Only VP9/AV1-only videos (often 4K) get converted. Re-running a playlist skips videos you already have. Only download videos you're allowed to.
+The command prefers YouTube's own H.264 MP4, so most videos need no re-encoding. Only VP9/AV1-only videos (often 4K) get converted. Re-running a playlist skips videos you already have. If YouTube asks you to sign in ("confirm you're not a bot", private or age-restricted videos), choose **Sign in with cookies from** Chrome/Safari/Firefox/Edge/Brave or a `cookies.txt` file. Safari needs Full Disk Access for Terminal. Only download videos you're allowed to.
 
 ## Condensed game and highlight reel
 
